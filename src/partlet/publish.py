@@ -188,6 +188,11 @@ def write_site_index(store: Store, site: Site) -> None:
 def publish_all(
     monorepo: Path, manifest: Manifest, store: Store, workdir: Path
 ) -> list[ProjectResult]:
+    """Publish every project in `manifest`; one project's failure does not stop the rest.
+
+    `workdir` must be fresh: each project is exported to `<workdir>/<name>/export.git`,
+    and an export refuses a destination that already exists.
+    """
     results = []
     for project in manifest.projects.values():
         try:

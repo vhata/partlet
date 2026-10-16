@@ -240,6 +240,16 @@ def fresh_export_clone(mono, dest):
     )
 
 
+def test_export_survives_a_renamed_default_remote(mono, tmp_path, monkeypatch):
+    # filter-repo's fresh-clone check wants exactly one remote, named origin.
+    make_basic(mono)
+    config = tmp_path / "gitconfig"
+    config.write_text("[clone]\n\tdefaultRemoteName = upstream\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    export_project(mono.path, "main", Project("foo", "tools/foo"), tmp_path / "e.git")
+    assert files_at(tmp_path / "e.git") == ["a.txt"]
+
+
 def test_check_export_repo_accepts_a_fresh_bare_clone(mono, tmp_path):
     make_basic(mono)
     dest = tmp_path / "e.git"
@@ -247,27 +257,119 @@ def test_check_export_repo_accepts_a_fresh_bare_clone(mono, tmp_path):
     check_export_repo(dest, mono.path)  # does not raise
 
 
-def test_check_export_repo_rejects_the_monorepo_and_its_insides(mono, tmp_path):
+def test_check_export_repo_rejects_a_work_tree_and_the_monorepo_itself(mono, tmp_path):
     make_basic(mono)
     config = mono.path / ".git" / "config"
     before = config.read_bytes()
     for bad in (mono.path, mono.path / ".git", mono.path / "tools" / "foo"):
-        with pytest.raises(ExportError):
+        with pytest.raises(ExportError, match="not a bare repository"):
             check_export_repo(bad, mono.path)
     assert config.read_bytes() == before
 
 
-def test_check_export_repo_rejects_a_plain_directory_outside_any_repo(mono, tmp_path):
+def test_check_export_repo_rejects_a_directory_outside_any_repository(mono, tmp_path):
     make_basic(mono)
     plain = tmp_path / "plain"
     plain.mkdir()
-    with pytest.raises(ExportError):
+    with pytest.raises(ExportError, match="cannot inspect"):
         check_export_repo(plain, mono.path)
+    with pytest.raises(ExportError, match="cannot inspect"):
+        check_export_repo(tmp_path / "missing", mono.path)
+
+
+def test_check_export_repo_rejects_a_directory_that_git_climbs_out_of(mono, tmp_path):
+    # From a plain directory inside a bare repository, git finds the repository
+    # above it, so a mutating command run there would hit that repository.
+    make_basic(mono)
+    real = tmp_path / "real.git"
+    fresh_export_clone(mono, real)
+    with pytest.raises(ExportError, match="resolves to"):
+        check_export_repo(real / "refs", mono.path)
+
+
+def test_check_export_repo_rejects_a_repo_that_borrows_a_common_dir(mono, tmp_path):
+    make_basic(mono)
+    other = tmp_path / "other.git"
+    dest = tmp_path / "e.git"
+    fresh_export_clone(mono, other)
+    fresh_export_clone(mono, dest)
+    (dest / "commondir").write_text(f"{other}\n")
+    with pytest.raises(ExportError, match="common dir"):
+        check_export_repo(dest, mono.path)
+
+
+def test_check_export_repo_rejects_a_bare_monorepo_itself(mono, tmp_path):
+    make_basic(mono)
+    real = tmp_path / "real.git"
+    fresh_export_clone(mono, real)
+    with pytest.raises(ExportError, match="monorepo's own"):
+        check_export_repo(real, real)
+
+
+def test_check_export_repo_rejects_the_bare_repo_behind_a_linked_worktree(
+    mono, tmp_path
+):
+    make_basic(mono)
+    real = tmp_path / "real.git"
+    fresh_export_clone(mono, real)
+    linked = tmp_path / "linked"
+    git("worktree", "add", "--quiet", "--detach", str(linked), "main", cwd=real)
+    config = real / "config"
+    before = config.read_bytes()
+    with pytest.raises(ExportError, match="monorepo's own"):
+        check_export_repo(real, linked)
+    assert config.read_bytes() == before
 
 
 def test_check_export_repo_rejects_a_bare_repo_inside_the_monorepo(mono, tmp_path):
     make_basic(mono)
     dest = mono.path / "nested.git"
     fresh_export_clone(mono, dest)
-    with pytest.raises(ExportError, match="inside"):
+    with pytest.raises(ExportError, match="inside the monorepo"):
         check_export_repo(dest, mono.path)
+
+
+def test_check_export_repo_knows_the_monorepo_top_level_from_a_subdirectory(
+    mono, tmp_path
+):
+    make_basic(mono)
+    dest = mono.path / "other" / "nested.git"
+    dest.parent.mkdir(exist_ok=True)
+    fresh_export_clone(mono, dest)
+    with pytest.raises(ExportError, match="inside the monorepo"):
+        check_export_repo(dest, mono.path / "tools" / "foo")
+
+
+def swapped_case(path: Path) -> Path:
+    other = Path(str(path).swapcase())
+    if not other.exists():
+        pytest.skip("case-sensitive filesystem")
+    return other
+
+
+def test_check_export_repo_inside_check_ignores_path_case(mono, tmp_path):
+    make_basic(mono)
+    dest = mono.path / "nested.git"
+    fresh_export_clone(mono, dest)
+    with pytest.raises(ExportError, match="inside the monorepo"):
+        check_export_repo(swapped_case(dest), mono.path)
+    with pytest.raises(ExportError, match="inside the monorepo"):
+        check_export_repo(dest, swapped_case(mono.path))
+
+
+def test_destination_inside_the_monorepo_is_refused_before_anything_is_written(
+    mono, tmp_path
+):
+    make_basic(mono)
+    dest = mono.path / "new" / "e.git"
+    with pytest.raises(ExportError, match="inside the monorepo"):
+        export_project(mono.path, "main", Project("foo", "tools/foo"), dest)
+    assert not (mono.path / "new").exists()
+
+
+def test_destination_inside_the_monorepo_is_refused_whatever_its_case(mono, tmp_path):
+    make_basic(mono)
+    dest = swapped_case(mono.path) / "new" / "e.git"
+    with pytest.raises(ExportError, match="inside the monorepo"):
+        export_project(mono.path, "main", Project("foo", "tools/foo"), dest)
+    assert not (mono.path / "new").exists()

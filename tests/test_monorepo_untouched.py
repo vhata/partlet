@@ -22,20 +22,27 @@ from partlet.store import LocalStore
 
 
 def fingerprint(root: Path) -> dict[str, tuple[int, str]]:
-    """Map every file under `root` to its mode and sha256, using only the filesystem."""
-    prints = {}
-    for dirpath, _dirnames, filenames in os.walk(root):
-        for name in filenames:
+    """Map every entry under `root` to its mode and sha256, using only the filesystem.
+
+    Files hash their content, symlinks (to files or directories) hash their
+    target, and directories, including `root` itself, hash nothing and record
+    only their mode. Directory keys end in a slash.
+    """
+    empty = hashlib.sha256(b"").hexdigest()
+    prints = {"./": (stat.S_IMODE(root.lstat().st_mode), empty)}
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames + filenames:
             path = Path(dirpath) / name
             info = path.lstat()
+            key = str(path.relative_to(root))
             if stat.S_ISLNK(info.st_mode):
-                content = os.readlink(path).encode()
+                digest = hashlib.sha256(os.readlink(path).encode()).hexdigest()
+            elif stat.S_ISDIR(info.st_mode):
+                key += "/"
+                digest = empty
             else:
-                content = path.read_bytes()
-            prints[str(path.relative_to(root))] = (
-                stat.S_IMODE(info.st_mode),
-                hashlib.sha256(content).hexdigest(),
-            )
+                digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            prints[key] = (stat.S_IMODE(info.st_mode), digest)
     return prints
 
 
@@ -92,9 +99,41 @@ def test_fingerprint_sees_changes_anywhere_in_the_repository(mono):
     assert fingerprint(mono.path) != base
 
 
+def test_fingerprint_sees_directories_and_symlinks(mono, tmp_path):
+    mono.write("foo/a.txt", "one\n")
+    mono.commit("c1")
+    (mono.path / "empty").mkdir()
+    (mono.path / "dirlink").symlink_to(tmp_path)
+    base = fingerprint(mono.path)
+    assert "empty/" in base
+    assert "dirlink" in base
+
+    (mono.path / "empty").chmod(0o700)
+    changed = fingerprint(mono.path)
+    assert changed != base
+    (mono.path / "dirlink").unlink()
+    (mono.path / "dirlink").symlink_to(mono.path)
+    assert fingerprint(mono.path) != changed
+    (mono.path / "empty").rmdir()
+    assert "empty/" not in fingerprint(mono.path)
+
+
 def test_first_publish(mono, tmp_path, published):
     mono, store, approved = published
     assert publish(mono, tmp_path, store, approved).status == "published"
+
+
+def test_publish_with_the_monorepo_named_by_inherited_git_variables(
+    mono, tmp_path, published, monkeypatch
+):
+    # The original threat: git run from a hook has GIT_DIR and GIT_WORK_TREE set
+    # to the monorepo, and every git command that trusts them acts on it.
+    mono, store, approved = published
+    monkeypatch.setenv("GIT_DIR", str(mono.path / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(mono.path))
+    monkeypatch.chdir(mono.path)
+    assert publish(mono, tmp_path, store, approved).status == "published"
+    assert publish(mono, tmp_path, store, approved).status == "unchanged"
 
 
 def test_unchanged_rerun(mono, tmp_path, published):
