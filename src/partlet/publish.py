@@ -55,8 +55,24 @@ def _put_json(store: Store, key: str, value) -> None:
     )
 
 
-def _run_cleanup(store: Store, prefix: str) -> None:
+def _run_cleanup(store: Store, prefix: str, current: dict | None) -> None:
+    # cleanup.json can be stale: a publish that died after `current` but before
+    # cleanup.json may have brought listed keys back to life. Never delete those.
+    live = {
+        key
+        for pack in read_state(store, f"{prefix}/git").packs
+        for key in (
+            f"{prefix}/git/objects/pack/{pack}.pack",
+            f"{prefix}/git/objects/pack/{pack}.idx",
+        )
+    }
+    live_build = None
+    if current:
+        live_build = f"{prefix}/site/{current['build']}/"
+        live |= {f"{prefix}/archive/{current['tip']}.{fmt}" for fmt in ARCHIVE_FORMATS}
     for key in _read_json(store, f"{prefix}/cleanup.json") or []:
+        if key in live or (live_build and key.startswith(live_build)):
+            continue
         store.delete(key)
 
 
@@ -86,7 +102,7 @@ def publish_project(
         if decision.action == "unchanged" and current and current.get("build") == build:
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
 
-        _run_cleanup(store, prefix)
+        _run_cleanup(store, prefix, current)
         superseded: list[str] = []
 
         # 1. New objects first: nothing references them yet.

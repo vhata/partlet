@@ -8,7 +8,7 @@ from partlet.publish import build_id, publish_all
 from partlet.store import LocalStore
 
 
-def manifest(approved, extra=""):
+def manifest(approved, extra="", description="Foo tool"):
     return parse_manifest(f"""
 [site]
 source = "s"
@@ -16,7 +16,7 @@ base_url = "https://partlet.example"
 
 [projects.foo]
 path = "foo"
-description = "Foo tool"
+description = "{description}"
 approved = "{approved}"
 {extra}
 
@@ -34,12 +34,10 @@ def export_tip(mono, tmp_path):
     return export_project(mono.path, "main", Project("foo", "foo"), dest)
 
 
-def run(mono, tmp_path, store, approved, extra=""):
+def run(mono, tmp_path, store, approved, extra="", description="Foo tool"):
     work = tmp_path / f"work-{len(list(tmp_path.glob('work-*')))}"
-    return {
-        r.name: r
-        for r in publish_all(mono.path, manifest(approved, extra), store, work)
-    }
+    m = manifest(approved, extra, description)
+    return {r.name: r for r in publish_all(mono.path, m, store, work)}
 
 
 @pytest.fixture
@@ -266,3 +264,60 @@ approved = "{tips["bar"]}"
     assert results["bar"].status == "published"
     index = json.loads(store.get("s/index.json"))
     assert [p["name"] for p in index] == ["bar"]
+
+
+class InterruptedStore(LocalStore):
+    """Fails the put of one key, as if the publish died at that point."""
+
+    def __init__(self, root, fail_key):
+        super().__init__(root)
+        self.fail_key = fail_key
+
+    def put(self, key, data, content_type=None):
+        if key == self.fail_key:
+            raise OSError(f"interrupted before {key}")
+        super().put(key, data, content_type)
+
+
+class RecordingStore(LocalStore):
+    """Records each deleted key with the build `current` named at that moment."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.deleted = []
+
+    def delete(self, key):
+        build = json.loads(self.get("s/p/foo/current"))["build"]
+        self.deleted.append((key, build))
+        super().delete(key)
+
+
+def test_stale_cleanup_list_never_deletes_the_live_build(mono, tmp_path, first, serve):
+    store, approved = first
+    out = tmp_path / "out"
+    run(mono, tmp_path, store, approved, description="X")
+    build_x = json.loads(store.get("s/p/foo/current"))["build"]
+    run(mono, tmp_path, store, approved, description="Y")
+
+    # Back to X: the same build ID again, interrupted after `current` moves
+    # but before `cleanup.json`, which still lists the X build as dead.
+    interrupted = InterruptedStore(out, "s/p/foo/cleanup.json")
+    result = run(mono, tmp_path, interrupted, approved, description="X")["foo"]
+    assert result.status == "failed"
+    assert json.loads(store.get("s/p/foo/current"))["build"] == build_x
+    assert f"s/p/foo/site/{build_x}/index.html" in json.loads(
+        store.get("s/p/foo/cleanup.json")
+    )
+
+    mono.write("foo/a.txt", "one\ntwo\n")
+    mono.commit("c2")
+    recording = RecordingStore(out)
+    result = run(mono, tmp_path, recording, approved, description="X")["foo"]
+    assert result.status == "published"
+    live = [key for key, build in recording.deleted if f"/site/{build}/" in key]
+    assert live == []
+    build = json.loads(store.get("s/p/foo/current"))["build"]
+    assert store.get(f"s/p/foo/site/{build}/index.html") is not None
+    with serve(out) as base:
+        git("clone", "-q", f"{base}/s/p/foo/git", str(tmp_path / "clone"), cwd=tmp_path)
+    assert (tmp_path / "clone" / "a.txt").read_text() == "one\ntwo\n"
