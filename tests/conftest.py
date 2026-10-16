@@ -61,6 +61,7 @@ def pytest_sessionfinish(session, exitstatus):
     except TripwireError as exc:
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         if reporter is not None:
+            reporter.write_line("")
             reporter.write_sep("=", "REPOSITORY TRIPWIRE FIRED", red=True, bold=True)
             reporter.write_line(str(exc))
         else:
