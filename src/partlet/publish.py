@@ -88,6 +88,7 @@ def publish_project(
     site = manifest.site
     prefix = project_prefix(site.source, project.name)
     pdir = workdir / project.name
+    tip = None
     try:
         mailmap = monorepo / site.mailmap if site.mailmap else None
         repo = pdir / "export.git"
@@ -153,9 +154,10 @@ def publish_project(
                     for fmt in ARCHIVE_FORMATS
                 ]
         _put_json(store, f"{prefix}/cleanup.json", sorted(set(superseded)))
-        return ProjectResult(project.name, "published", tip, decision.reason)
+        reason = "re-rendered" if decision.action == "unchanged" else decision.reason
+        return ProjectResult(project.name, "published", tip, reason)
     except (ExportError, HistoryError, GitError) as e:
-        return ProjectResult(project.name, "failed", reason=str(e))
+        return ProjectResult(project.name, "failed", tip, str(e))
 
 
 def write_site_index(store: Store, site: Site) -> None:

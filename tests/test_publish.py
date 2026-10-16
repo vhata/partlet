@@ -128,6 +128,7 @@ approved = "{approved}"
         r.name: r for r in publish_all(mono.path, changed, store, tmp_path / "w-desc")
     }
     assert results["foo"].status == "published"
+    assert results["foo"].reason == "re-rendered"
     assert store.list("s/p/foo/git/objects/pack/") == packs
     assert json.loads(store.get("s/p/foo/current"))["description"] == "New words"
 
@@ -151,6 +152,7 @@ def test_rewrite_is_rejected_and_nothing_changes(mono, tmp_path, first):
     new_approved = export_tip(mono, tmp_path)
     result = run(mono, tmp_path, store, new_approved)["foo"]
     assert result.status == "failed" and "rewrite" in result.reason
+    assert result.tip == new_approved
     assert store.get("s/p/foo/git/info/refs") == before
 
 
