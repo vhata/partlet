@@ -102,6 +102,36 @@ def test_html_in_names_and_content_is_escaped():
     assert "<script>x" not in pages["blob/<b>.txt"]
 
 
+def test_plain_readme_symlink_target_and_description_are_escaped():
+    info = ProjectInfo(
+        "foo", "<script>d</script>", "a" * 40, "https://partlet.example", "2026"
+    )
+    entries = [
+        FileEntry("README", b"<script>x</script>\n"),
+        FileEntry("link", b"<b>target", is_symlink=True),
+    ]
+    pages = {k: v.decode("utf-8") for k, v in render_project(info, entries).items()}
+    index = pages["index.html"]
+    assert "<script>" not in index
+    assert "&lt;script&gt;x&lt;/script&gt;" in index
+    assert "&lt;script&gt;d&lt;/script&gt;" in index
+    assert "<b>target" not in pages["blob/link"]
+    assert "&lt;b&gt;target" in pages["blob/link"]
+    listing = render_site_index(
+        info.base_url,
+        [
+            {
+                "name": "foo",
+                "description": info.description,
+                "tip": info.tip,
+                "updated": "",
+            }
+        ],
+    ).decode()
+    assert "<script>" not in listing
+    assert "&lt;script&gt;d&lt;/script&gt;" in listing
+
+
 def test_site_index_lists_projects():
     page = render_site_index(
         "https://partlet.example",
