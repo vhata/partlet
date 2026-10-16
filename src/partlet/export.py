@@ -103,8 +103,14 @@ def _object_type(repo: Path, rev: str) -> str | None:
 
 
 def _git_path(*args: str, cwd: Path) -> Path:
-    path = Path(git_out("rev-parse", "--path-format=absolute", *args, cwd=cwd))
-    return path if path.is_absolute() else cwd / path
+    out = git_out("rev-parse", "--path-format=absolute", *args, cwd=cwd)
+    # Before git 2.31 the unknown flag is echoed back as output, with exit 0.
+    if "\n" in out or not Path(out).is_absolute():
+        raise ExportError(
+            f"git 2.31 or newer is required (rev-parse --path-format=absolute); "
+            f"git printed {out!r}"
+        )
+    return Path(out)
 
 
 def _same(a: Path, b: Path) -> bool:

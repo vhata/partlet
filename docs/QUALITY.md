@@ -28,14 +28,14 @@ Each check is a standalone script in `scripts/` or `docket/scripts/`, runnable f
 
 Hooks are a tracked `.githooks/` directory, wired with `git config core.hooksPath .githooks` by `bash scripts/setup.sh`. Pre-commit runs the format check, lint and the queue and link validators on the whole working tree; it only checks and never rewrites files. Pre-push runs `bash scripts/check.sh`, including the test suite. Bypassing a hook is for a broken toolchain only; state the bypass and the equivalent checks in the PR.
 
-Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in `pyproject.toml`. Bumping a pin is its own PR.
+Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in `pyproject.toml`; git 2.31 or newer (`rev-parse --path-format`). Bumping a pin is its own PR.
 
 ## Test policy
 
 - Behaviour changes come with a test at the lowest layer that can show the behaviour; Git behaviour (exports, history checks, clone and pull) is tested against real repositories built in the test, not mocks.
 - Documentation-only changes need no new tests; `docket/scripts/check-links.sh` covers their links.
 - An empty or skipped suite is a failed gate.
-- Tests run git in a sandbox: `tests/conftest.py` removes inherited `GIT_*` variables, points `HOME` and the global git config at a temporary directory, and sets `GIT_CEILING_DIRECTORIES` so no test can reach a real repository. A session tripwire fails the run, naming a backup to restore from, if this repository's git config, `HEAD` or branch ref, or the user's `~/.gitconfig` change during the run. `scripts/test.sh` also unsets git's repository variables before starting pytest.
+- Tests run git in a sandbox: `tests/conftest.py` removes inherited `GIT_*` variables when it is imported, points `HOME` and the global git config at a temporary directory, moves the process into a directory under pytest's base temp, and sets `GIT_CEILING_DIRECTORIES` so no test can reach a real repository. A tripwire armed at session start fails the run, with a diff and a backup to compare against, if this repository's git config, `HEAD`, branch refs (including the main checkout's `HEAD` and `main`), the worktree's `.git` file, or the user's global git config change during the run. `scripts/test.sh` also unsets git's repository variables before starting pytest.
 - No automatic retries. A flaky test is filed in `TODO.md` with its evidence and fixed or quarantined by name.
 
 ## Review inputs

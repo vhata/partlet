@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import partlet.export
 from partlet.export import ExportError, check_export_repo, export_project
 from partlet.gitutil import git, git_out
 from partlet.manifest import Project
@@ -152,6 +153,39 @@ def test_branch_is_renamed_to_main(tmp_path):
         "for-each-ref", "--format=%(refname)", cwd=tmp_path / "e.git"
     ).splitlines()
     assert refs == ["refs/heads/main"]
+
+
+def test_export_checks_the_destination_before_each_mutating_step(tmp_path, monkeypatch):
+    from helpers import Repo
+
+    mono = Repo(tmp_path / "mono", branch="trunk")
+    mono.write("foo/a.txt", "a\n")
+    mono.commit("c1")
+    events: list[tuple[str, ...]] = []
+
+    def spy(name, real):
+        def wrapper(*args, **kwargs):
+            events.append((name, *args[:1]) if name == "git" else (name,))
+            return real(*args, **kwargs)
+
+        return wrapper
+
+    for name in ("check_export_repo", "run_filter_repo", "git"):
+        monkeypatch.setattr(
+            partlet.export, name, spy(name, getattr(partlet.export, name))
+        )
+    export_project(mono.path, "trunk", Project("foo", "foo"), tmp_path / "e.git")
+
+    names = [e[0] for e in events]
+    filter_at = names.index("run_filter_repo")
+    assert "check_export_repo" in names[:filter_at]
+    mutating = [
+        i
+        for i, e in enumerate(events)
+        if e in {("git", "branch"), ("git", "symbolic-ref")}
+    ]
+    assert mutating, "expected branch -m / symbolic-ref to run"
+    assert "check_export_repo" in names[filter_at + 1 : mutating[0]]
 
 
 def test_missing_directory_fails_with_hint(mono, tmp_path):
@@ -373,3 +407,14 @@ def test_destination_inside_the_monorepo_is_refused_whatever_its_case(mono, tmp_
     with pytest.raises(ExportError, match="inside the monorepo"):
         export_project(mono.path, "main", Project("foo", "tools/foo"), dest)
     assert not (mono.path / "new").exists()
+
+
+def test_git_path_rejects_output_from_a_git_without_path_format(monkeypatch):
+    # Before git 2.31, rev-parse echoes the unknown flag back and exits 0.
+    monkeypatch.setattr(
+        partlet.export, "git_out", lambda *a, **k: "--path-format=absolute\n/some/path"
+    )
+    with pytest.raises(
+        ExportError, match=r"git 2\.31 or newer.*--path-format=absolute"
+    ):
+        partlet.export._git_path("--git-common-dir", cwd=Path("/x"))
