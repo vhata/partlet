@@ -56,6 +56,7 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 - [ACTION] `r2-publishing-plan` — **Write the implementation plan for publishing to R2.** Plan 3 of 3: R2 store, gitleaks, `partlet review`, `publish` and `unpublish`, the composite action and the end-to-end test.
   - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
   - The export needs a local `refs/heads/<branch>` in the monorepo checkout and fails with "branch ... not found" without one; the action's checkout step must provide it.
+  - The test sandbox in `tests/conftest.py` must also strip R2 and Cloudflare credential variables, so no test can reach a real bucket; the R2 store's tests run against a local or fake endpoint only.
 - [PUBLISHER] `publish-orphan-sweep` — **Delete keys left behind by an interrupted publish.** Packs, site builds and archives uploaded by a publish that dies before writing `cleanup.json` are listed nowhere, so the next publish never removes them, although the design spec promises it does.
   - Source: todo/publisher-core, 2026-10-15
   - A crash after the pointers and `current` move but before `cleanup.json` is written also loses the superseded keys, and the next run then takes the `unchanged` shortcut.
