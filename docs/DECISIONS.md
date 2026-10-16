@@ -1,0 +1,13 @@
+# Decisions
+
+Non-obvious choices and their trade-offs, dated, newest section first. Read the relevant entry before changing a mechanism that looks odd. Choices made autonomously under a delegation are recorded here for the user to review; an entry is a record, not a claim that the capability is complete.
+
+## 2026-10-15
+
+| Decision | Reason and trade-off |
+| --- | --- |
+| Export project history with `git filter-repo`, not `git subtree split`. | `subtree split` follows one prefix only, so a directory move loses all earlier history and turns into a rewrite. `filter-repo` maps the current and previous paths to the root, so a move made after publication fast-forwards. Cost: one extra dependency, installed with pip and pinned. |
+| A project publishes only after its export tip is pinned as `approved` in the manifest, and every later publish must fast-forward from the published tip. | The pin records the user's review of the full history (deleted files, authors, messages, secret scan) and anchors the rewrite check, so CI can enforce both. A rewrite needs `allow_rewrite_of` naming the exact published tip, which lets exactly one rewrite through. |
+| Pre-render the whole site in the publisher; the Worker only maps URLs to stored objects. | Keeps all rendering in tested Python and the Worker small. Cost: template changes need a re-run of the publisher, which re-renders from existing exports without touching Git history. |
+| One source monorepo per site, with every store key under a per-source prefix. | Simplest model for one user. The prefix leaves room for several sources on one site without changing the storage layout. |
+| Shell hooks in a tracked `.githooks/` directory rather than a hook manager. | No dependency to install, and today's gates are shell scripts. Revisit when the Python and TypeScript gates make a polyglot manager such as lefthook worth it. |

@@ -1,0 +1,59 @@
+# Merge-blocking checks. Every job calls a script in scripts/ or
+# docket/scripts/, so `bash scripts/check.sh` reproduces the check job
+# locally and `bash docket/scripts/ci.sh` the workflow job. See
+# docs/QUALITY.md.
+name: CI
+
+on:
+  pull_request:
+    # edited: a re-run reuses the original event payload, so without this
+    # trigger an edited PR body is re-validated as it was before the edit.
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  # ci.sh reads the PR body from the event payload; pull-requests: read covers
+  # its fallback to `gh pr view` when jq is missing or the payload describes
+  # another pull request.
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash   # explicit bash gives `-eo pipefail`
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded runs on PR branches only. Cancelling runs on main hides
+  # red builds when several PRs merge in quick succession.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # shellcheck is preinstalled on ubuntu-latest. Python and Node setup
+      # steps are added here as those components land.
+      - run: bash scripts/setup.sh
+      - run: bash scripts/check.sh
+
+  workflow:
+    name: Queue and PR hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Queue hygiene, Markdown links and, on pull requests, the PR markers.
+      # The PR variables are empty on push events and ci.sh then skips the
+      # marker check.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: bash docket/scripts/ci.sh
