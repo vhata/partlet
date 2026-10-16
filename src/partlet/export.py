@@ -54,6 +54,8 @@ def export_project(
 
 
 def _require_directory(monorepo: Path, branch: str, path: str) -> None:
+    if not _branch_exists(monorepo, branch):
+        raise ExportError(f"branch {branch!r} not found in {monorepo}")
     proc_type = _object_type(monorepo, f"{branch}:{path}")
     if proc_type is None:
         raise ExportError(
@@ -62,6 +64,20 @@ def _require_directory(monorepo: Path, branch: str, path: str) -> None:
         )
     if proc_type != "tree":
         raise ExportError(f"{path!r} on {branch} is not a directory")
+
+
+def _branch_exists(repo: Path, branch: str) -> bool:
+    try:
+        git(
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            f"refs/heads/{branch}^{{commit}}",
+            cwd=repo,
+        )
+    except GitError:
+        return False
+    return True
 
 
 def _object_type(repo: Path, rev: str) -> str | None:

@@ -94,6 +94,15 @@ def test_missing_directory_fails_with_hint(mono, tmp_path):
         )
 
 
+def test_missing_branch_fails_with_branch_message(mono, tmp_path):
+    make_basic(mono)
+    with pytest.raises(ExportError, match="branch") as info:
+        export_project(
+            mono.path, "nope", Project("foo", "tools/foo"), tmp_path / "e.git"
+        )
+    assert "previous_paths" not in str(info.value)
+
+
 def test_path_that_is_a_file_fails(mono, tmp_path):
     mono.write("foo", "i am a file\n")
     mono.commit("c1")
