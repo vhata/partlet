@@ -179,6 +179,57 @@ def test_allowed_rewrite_publishes_full_pack(mono, tmp_path, first):
     assert packs.count("P") == 1
 
 
+def amend(mono, message, when):
+    date = f"{when} +0000"
+    git(
+        "commit",
+        "-q",
+        "--amend",
+        "-m",
+        message,
+        cwd=mono.path,
+        env={"GIT_COMMITTER_DATE": date, "GIT_AUTHOR_DATE": date},
+    )
+
+
+def test_stale_allow_rewrite_of_permits_only_one_rewrite(mono, tmp_path, first):
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    allow = f'allow_rewrite_of = "{approved}"'
+
+    amend(mono, "rewritten once", 1767229200)
+    tip = export_tip(mono, tmp_path)
+    assert run(mono, tmp_path, store, tip, extra=allow)["foo"].status == "published"
+    published = store.get("s/p/foo/git/info/refs")
+
+    amend(mono, "rewritten twice", 1767232800)
+    tip = export_tip(mono, tmp_path)
+    result = run(mono, tmp_path, store, tip, extra=allow)["foo"]
+    assert result.status == "failed" and "rewrite" in result.reason
+    assert store.get("s/p/foo/git/info/refs") == published
+
+
+def test_retroactive_previous_paths_is_rejected_as_rewrite(mono, tmp_path):
+    from partlet.export import export_project
+    from partlet.manifest import Project
+
+    mono.write("legacy/old.txt", "old\n")
+    mono.write("foo/a.txt", "one\n")
+    mono.commit("c1")
+    store = LocalStore(tmp_path / "out")
+    approved = export_tip(mono, tmp_path)
+    assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    before = store.get("s/p/foo/git/info/refs")
+
+    widened = Project("foo", "foo", previous_paths=("legacy",))
+    new_tip = export_project(mono.path, "main", widened, tmp_path / "wide.git")
+    result = run(mono, tmp_path, store, new_tip, extra='previous_paths = ["legacy"]')[
+        "foo"
+    ]
+    assert result.status == "failed" and "rewrite" in result.reason
+    assert store.get("s/p/foo/git/info/refs") == before
+
+
 def test_missing_directory_fails_project_but_index_still_written(mono, tmp_path, first):
     store, approved = first
     run(mono, tmp_path, store, approved)

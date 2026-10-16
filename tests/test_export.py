@@ -70,6 +70,75 @@ def test_move_with_previous_paths_fast_forwards(mono, tmp_path):
     assert subjects(repo) == ["c3", "c2", "c1"]  # the move commit is pruned
 
 
+def test_move_of_names_that_need_quoting_still_fast_forwards(mono, tmp_path):
+    mono.write("scripts/foo/a b.txt", "one\n")
+    mono.commit("c1")
+    before = export_project(
+        mono.path, "main", Project("foo", "scripts/foo"), tmp_path / "before.git"
+    )
+
+    mono.mv("scripts/foo", "tools/foo")
+    mono.commit("move")
+    mono.write("tools/foo/a b.txt", "one\ntwo\n")
+    mono.commit("c2")
+    moved = Project("foo", "tools/foo", previous_paths=("scripts/foo",))
+    after = export_project(mono.path, "main", moved, tmp_path / "after.git")
+
+    # filter-repo keeps the move as an empty commit here (see docs/DECISIONS.md),
+    # so only ancestry is asserted.
+    git("merge-base", "--is-ancestor", before, after, cwd=tmp_path / "after.git")
+
+
+def test_merged_side_branch_keeps_project_commits(mono, tmp_path):
+    mono.write("tools/foo/a.txt", "one\n")
+    mono.write("other/x.txt", "x\n")
+    mono.commit("c1")
+    git("checkout", "-q", "-b", "side", cwd=mono.path)
+    mono.write("tools/foo/b.txt", "side\n")
+    mono.commit("s1 touches foo")
+    mono.write("tools/foo/b.txt", "side\nmore\n")
+    mono.commit("s2 touches foo")
+    git("checkout", "-q", "main", cwd=mono.path)
+    mono.write("other/x.txt", "x\ny\n")
+    mono.commit("m1 only other")
+    date = "1767232800 +0000"
+    git(
+        "merge",
+        "-q",
+        "--no-ff",
+        "-m",
+        "merge side",
+        "side",
+        cwd=mono.path,
+        env={"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date},
+    )
+    mono.write("other/x.txt", "x\ny\nz\n")
+    mono.commit("m2 only other")
+
+    project = Project("foo", "tools/foo")
+    a = export_project(mono.path, "main", project, tmp_path / "a.git")
+    b = export_project(mono.path, "main", project, tmp_path / "b.git")
+    assert a == b
+    repo = tmp_path / "a.git"
+    found = subjects(repo)
+    assert {"c1", "s1 touches foo", "s2 touches foo"} <= set(found)
+    assert "m1 only other" not in found
+    assert "m2 only other" not in found
+    assert files_at(repo) == ["a.txt", "b.txt"]
+
+
+def test_deleted_file_is_gone_at_tip_but_kept_in_history(mono, tmp_path):
+    mono.write("foo/a.txt", "a\n")
+    mono.write("foo/gone.txt", "soon gone\n")
+    mono.commit("c1")
+    mono.rm("foo/gone.txt")
+    mono.commit("c2 deletes gone.txt")
+    export_project(mono.path, "main", Project("foo", "foo"), tmp_path / "e.git")
+    repo = tmp_path / "e.git"
+    assert files_at(repo) == ["a.txt"]
+    assert files_at(repo, "refs/heads/main~1") == ["a.txt", "gone.txt"]
+
+
 def test_branch_is_renamed_to_main(tmp_path):
     from helpers import Repo
 
