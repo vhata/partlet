@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Gates are added to this list as the code they check lands.
-gates=(lint)
+gates=(fmt-check lint test)
 
 for gate in "${gates[@]}"; do
   [ -x "scripts/$gate.sh" ] || { echo "check: scripts/$gate.sh missing or not executable" >&2; exit 1; }

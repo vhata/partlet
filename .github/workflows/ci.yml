@@ -35,8 +35,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      # shellcheck is preinstalled on ubuntu-latest. Python and Node setup
-      # steps are added here as those components land.
+      # shellcheck is preinstalled on ubuntu-latest; uv provides Python.
+      - uses: astral-sh/setup-uv@v6
       - run: bash scripts/setup.sh
       - run: bash scripts/check.sh
 

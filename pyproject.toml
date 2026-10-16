@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "partlet"
+dynamic = ["version"]
+description = "Publish selected directories of a private monorepo as read-only Git repositories"
+requires-python = ">=3.12"
+dependencies = [
+  "git-filter-repo>=2.38",
+  "jinja2>=3.1",
+  "markdown-it-py>=3.0",
+  "pygments>=2.18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+partlet = "partlet.cli:main"
+
+[tool.hatch.version]
+path = "src/partlet/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/partlet"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
