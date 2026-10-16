@@ -20,7 +20,9 @@ def export_project(
     mailmap: Path | None = None,
 ) -> str:
     """Create a bare repo at `dest` holding only `project`'s history; return its tip."""
-    dest = dest.resolve()  # the clone below runs in the monorepo
+    dest = dest.resolve()
+    if dest.exists():
+        raise ExportError(f"export destination {dest} already exists")
     if git_out("rev-parse", "--is-shallow-repository", cwd=monorepo) == "true":
         raise ExportError(
             f"{monorepo} is a shallow clone; publishing needs full history "
@@ -28,6 +30,7 @@ def export_project(
         )
     _require_directory(monorepo, branch, project.path)
 
+    dest.parent.mkdir(parents=True, exist_ok=True)
     git(
         "clone",
         "--quiet",
@@ -39,15 +42,17 @@ def export_project(
         branch,
         str(monorepo.resolve()),
         str(dest),
-        cwd=monorepo,
+        cwd=dest.parent,
     )
-    args = ["--quiet", "--force", "--replace-refs", "delete-no-add"]
+    check_export_repo(dest, monorepo)
+    args = ["--quiet", "--replace-refs", "delete-no-add"]
     for path in project.all_paths:
         args += ["--path", f"{path}/", "--path-rename", f"{path}/:"]
     if mailmap is not None:
         args += ["--mailmap", str(mailmap.resolve())]
     run_filter_repo(*args, cwd=dest)
 
+    check_export_repo(dest, monorepo)  # filter-repo has run since the last check
     if branch != "main":
         git("branch", "-m", branch, "main", cwd=dest)
     git("symbolic-ref", "HEAD", "refs/heads/main", cwd=dest)
@@ -86,3 +91,30 @@ def _object_type(repo: Path, rev: str) -> str | None:
         return git_out("cat-file", "-t", rev, cwd=repo)
     except GitError:
         return None
+
+
+def check_export_repo(dest: Path, monorepo: Path) -> None:
+    """Raise unless `dest` is a bare repository of its own, outside `monorepo`.
+
+    Every mutating git command in this module runs with `dest` as its cwd, so
+    this is checked before each one: if `dest` were not itself the repository
+    git finds there (git climbs to the enclosing repository from a plain
+    directory), filter-repo would rewrite and gc that repository instead.
+    """
+    dest = dest.resolve()
+    try:
+        bare = git_out("rev-parse", "--is-bare-repository", cwd=dest)
+        git_dir = Path(git_out("rev-parse", "--absolute-git-dir", cwd=dest)).resolve()
+        mono_git_dir = Path(
+            git_out("rev-parse", "--absolute-git-dir", cwd=monorepo)
+        ).resolve()
+    except (GitError, OSError) as e:
+        raise ExportError(f"cannot inspect export repository {dest}: {e}") from e
+    if bare != "true":
+        raise ExportError(f"export repository {dest} is not a bare repository")
+    if git_dir != dest:
+        raise ExportError(f"git at {dest} resolves to {git_dir}, not {dest}")
+    if git_dir == mono_git_dir:
+        raise ExportError(f"export repository {dest} is the monorepo's own git dir")
+    if dest.is_relative_to(monorepo.resolve()):
+        raise ExportError(f"export repository {dest} is inside the monorepo")

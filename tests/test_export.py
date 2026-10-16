@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from partlet.export import ExportError, export_project
+from partlet.export import ExportError, check_export_repo, export_project
 from partlet.gitutil import git, git_out
 from partlet.manifest import Project
 
@@ -213,3 +213,61 @@ def test_relative_dest_is_relative_to_the_caller(mono, tmp_path, monkeypatch):
     export_project(mono.path, "main", Project("foo", "foo"), Path("e.git"))
     assert files_at(tmp_path / "e.git") == ["a.txt"]
     assert not (mono.path / "e.git").exists()
+
+
+def test_existing_destination_is_refused(mono, tmp_path):
+    make_basic(mono)
+    dest = tmp_path / "e.git"
+    dest.mkdir()
+    with pytest.raises(ExportError, match="already exists"):
+        export_project(mono.path, "main", Project("foo", "tools/foo"), dest)
+    assert list(dest.iterdir()) == []
+
+
+def fresh_export_clone(mono, dest):
+    git(
+        "clone",
+        "--quiet",
+        "--bare",
+        "--no-local",
+        "--no-tags",
+        "--single-branch",
+        "--branch",
+        "main",
+        str(mono.path),
+        str(dest),
+        cwd=dest.parent,
+    )
+
+
+def test_check_export_repo_accepts_a_fresh_bare_clone(mono, tmp_path):
+    make_basic(mono)
+    dest = tmp_path / "e.git"
+    fresh_export_clone(mono, dest)
+    check_export_repo(dest, mono.path)  # does not raise
+
+
+def test_check_export_repo_rejects_the_monorepo_and_its_insides(mono, tmp_path):
+    make_basic(mono)
+    config = mono.path / ".git" / "config"
+    before = config.read_bytes()
+    for bad in (mono.path, mono.path / ".git", mono.path / "tools" / "foo"):
+        with pytest.raises(ExportError):
+            check_export_repo(bad, mono.path)
+    assert config.read_bytes() == before
+
+
+def test_check_export_repo_rejects_a_plain_directory_outside_any_repo(mono, tmp_path):
+    make_basic(mono)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    with pytest.raises(ExportError):
+        check_export_repo(plain, mono.path)
+
+
+def test_check_export_repo_rejects_a_bare_repo_inside_the_monorepo(mono, tmp_path):
+    make_basic(mono)
+    dest = mono.path / "nested.git"
+    fresh_export_clone(mono, dest)
+    with pytest.raises(ExportError, match="inside"):
+        check_export_repo(dest, mono.path)
