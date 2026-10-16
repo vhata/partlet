@@ -37,8 +37,8 @@ def project_prefix(source: str, name: str) -> str:
     return f"{source}/p/{name}"
 
 
-def build_id(tip: str, description: str) -> str:
-    digest = hashlib.sha256(f"{tip}\0{description}\0{__version__}".encode())
+def build_id(tip: str, description: str, base_url: str) -> str:
+    digest = hashlib.sha256(f"{tip}\0{description}\0{base_url}\0{__version__}".encode())
     return digest.hexdigest()[:16]
 
 
@@ -82,7 +82,7 @@ def publish_project(
             repo, tip, state.tip, project.approved, project.allow_rewrite_of
         )
         current = _read_json(store, f"{prefix}/current")
-        build = build_id(tip, project.description)
+        build = build_id(tip, project.description, site.base_url)
         if decision.action == "unchanged" and current and current.get("build") == build:
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
 
@@ -145,11 +145,16 @@ def publish_project(
 def write_site_index(store: Store, site: Site) -> None:
     projects = []
     for name in store.list_dirs(f"{site.source}/p/"):
-        current = _read_json(store, f"{project_prefix(site.source, name)}/current")
-        if current:
-            projects.append(
-                {k: current[k] for k in ("name", "description", "tip", "updated")}
-            )
+        try:
+            current = _read_json(store, f"{project_prefix(site.source, name)}/current")
+            if current:
+                projects.append(
+                    {k: current[k] for k in ("name", "description", "tip", "updated")}
+                )
+        except (ValueError, KeyError, TypeError):
+            # A corrupt `current` leaves that project out of the index; the
+            # project's own publish reports the failure.
+            continue
     projects.sort(key=lambda p: p["name"])
     _put_json(store, f"{site.source}/index.json", projects)
     store.put(
@@ -165,9 +170,14 @@ def write_site_index(store: Store, site: Site) -> None:
 def publish_all(
     monorepo: Path, manifest: Manifest, store: Store, workdir: Path
 ) -> list[ProjectResult]:
-    results = [
-        publish_project(monorepo, manifest, project, store, workdir)
-        for project in manifest.projects.values()
-    ]
+    results = []
+    for project in manifest.projects.values():
+        try:
+            result = publish_project(monorepo, manifest, project, store, workdir)
+        except Exception as e:  # noqa: BLE001 - one project must not stop the rest
+            result = ProjectResult(
+                project.name, "failed", reason=f"{type(e).__name__}: {e}"
+            )
+        results.append(result)
     write_site_index(store, manifest.site)
     return results

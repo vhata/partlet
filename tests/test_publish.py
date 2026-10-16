@@ -60,7 +60,7 @@ def test_first_publish_writes_everything(mono, tmp_path, first):
 
     current = json.loads(store.get("s/p/foo/current"))
     assert current["tip"] == approved
-    assert current["build"] == build_id(approved, "Foo tool")
+    assert current["build"] == build_id(approved, "Foo tool", "https://partlet.example")
     assert current["description"] == "Foo tool"
     build = current["build"]
     assert store.get(f"s/p/foo/site/{build}/index.html") is not None
@@ -190,3 +190,79 @@ def test_missing_directory_fails_project_but_index_still_written(mono, tmp_path,
     assert result.status == "failed" and "previous_paths" in result.reason
     assert store.get("s/index.json") is not None
     assert json.loads(store.get("s/p/foo/current"))["tip"] == approved
+
+
+def test_base_url_change_rerenders_without_new_pack(mono, tmp_path, first):
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    packs = store.list("s/p/foo/git/objects/pack/")
+    build_before = json.loads(store.get("s/p/foo/current"))["build"]
+    changed = parse_manifest(f"""
+[site]
+source = "s"
+base_url = "https://other.example"
+[projects.foo]
+path = "foo"
+description = "Foo tool"
+approved = "{approved}"
+""")
+    results = {
+        r.name: r for r in publish_all(mono.path, changed, store, tmp_path / "w-url")
+    }
+    assert results["foo"].status == "published"
+    assert store.list("s/p/foo/git/objects/pack/") == packs
+    current = json.loads(store.get("s/p/foo/current"))
+    assert current["build"] != build_before
+    assert current["build"] == build_id(approved, "Foo tool", "https://other.example")
+
+
+def test_unexpected_error_fails_only_that_project_and_index_is_written(mono, tmp_path):
+    from partlet.export import export_project
+    from partlet.manifest import Project
+
+    mono.write("foo/a.txt", "one\n")
+    mono.write("bar/b.txt", "two\n")
+    mono.commit("c1")
+    tips = {
+        name: export_project(
+            mono.path, "main", Project(name, name), tmp_path / f"probe-{name}.git"
+        )
+        for name in ("foo", "bar")
+    }
+    both = parse_manifest(f"""
+[site]
+source = "s"
+base_url = "https://partlet.example"
+[projects.foo]
+path = "foo"
+approved = "{tips["foo"]}"
+[projects.bar]
+path = "bar"
+approved = "{tips["bar"]}"
+""")
+    store = LocalStore(tmp_path / "out")
+    publish_all(mono.path, both, store, tmp_path / "w-0")
+
+    store.put("s/p/foo/current", b"not json")
+    mono.write("bar/b.txt", "two\nmore\n")
+    mono.commit("c2")
+    tips["bar"] = export_project(
+        mono.path, "main", Project("bar", "bar"), tmp_path / "probe-bar-2.git"
+    )
+    both = parse_manifest(f"""
+[site]
+source = "s"
+base_url = "https://partlet.example"
+[projects.foo]
+path = "foo"
+approved = "{tips["foo"]}"
+[projects.bar]
+path = "bar"
+approved = "{tips["bar"]}"
+""")
+    results = {r.name: r for r in publish_all(mono.path, both, store, tmp_path / "w-1")}
+    assert results["foo"].status == "failed"
+    assert "JSONDecodeError" in results["foo"].reason
+    assert results["bar"].status == "published"
+    index = json.loads(store.get("s/index.json"))
+    assert [p["name"] for p in index] == ["bar"]
