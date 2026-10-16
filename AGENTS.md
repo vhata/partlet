@@ -1,6 +1,6 @@
 # Partlet: agent guide
 
-Partlet publishes selected directories of a private monorepo as public, read-only Git repositories with a static website, served from Cloudflare R2 by a Worker. Design specs are in `docs/specs/` and implementation plans in `plans/`.
+Partlet publishes selected directories of a private monorepo as public, read-only Git repositories with a static website, served from Cloudflare R2 by a Worker. Design specs go in `docs/specs/` and implementation plans in `plans/`.
 
 <!-- docket:begin -->
 

@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 
 command -v shellcheck >/dev/null || { echo "lint: shellcheck not installed" >&2; exit 1; }
 
+shopt -s nullglob
 files=(scripts/*.sh .githooks/*)
-[ -e "${files[0]}" ] || { echo "lint: no shell scripts found" >&2; exit 1; }
+[ "${#files[@]}" -gt 0 ] || { echo "lint: no shell scripts found" >&2; exit 1; }
 shellcheck "$@" "${files[@]}"
 echo "lint: ${#files[@]} shell scripts clean"

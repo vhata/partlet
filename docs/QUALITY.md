@@ -16,7 +16,7 @@ Each check is a standalone script in `scripts/` or `docket/scripts/`, runnable f
 
 | Script | Runs | Pre-commit | Pre-push | CI on PR | CI on main | Scheduled |
 | --- | --- | --- | --- | --- | --- | --- |
-| `scripts/lint.sh` | shellcheck over `scripts/*.sh` and `.githooks/*` | yes | | yes | yes | |
+| `scripts/lint.sh` | shellcheck over `scripts/*.sh` and `.githooks/*` | via `check.sh` | | via `check.sh` | via `check.sh` | |
 | `docket/scripts/ci.sh` | queue hygiene, Markdown links, PR markers against the queues | | | yes | yes | |
 | `docket/scripts/check-queues.sh --strict` | queue hygiene | yes | | via `ci.sh` | via `ci.sh` | |
 | `docket/scripts/check-links.sh` | relative Markdown links resolve | yes | | via `ci.sh` | via `ci.sh` | |
@@ -55,7 +55,7 @@ Deferred until there is code worth an extended run; see the Docket section of `A
 
 ## Branch protection
 
-Not configured yet. Proposed settings are recorded here once the user applies them.
+Not configured yet. The settings are recorded here once the user applies them.
 
 ## PR evidence
 
