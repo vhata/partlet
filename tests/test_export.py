@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from partlet.export import ExportError, export_project
@@ -202,3 +204,12 @@ def test_mailmap_rewrites_author(mono, tmp_path):
         ).splitlines()
     )
     assert authors == {"Public Name <public@example.com>"}
+
+
+def test_relative_dest_is_relative_to_the_caller(mono, tmp_path, monkeypatch):
+    mono.write("foo/a.txt", "a\n")
+    mono.commit("c1")
+    monkeypatch.chdir(tmp_path)
+    export_project(mono.path, "main", Project("foo", "foo"), Path("e.git"))
+    assert files_at(tmp_path / "e.git") == ["a.txt"]
+    assert not (mono.path / "e.git").exists()

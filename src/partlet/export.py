@@ -20,6 +20,7 @@ def export_project(
     mailmap: Path | None = None,
 ) -> str:
     """Create a bare repo at `dest` holding only `project`'s history; return its tip."""
+    dest = dest.resolve()  # the clone below runs in the monorepo
     if git_out("rev-parse", "--is-shallow-repository", cwd=monorepo) == "true":
         raise ExportError(
             f"{monorepo} is a shallow clone; publishing needs full history "
