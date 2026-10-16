@@ -71,3 +71,49 @@ def serve_directory(root: Path) -> Iterator[str]:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def repo_state_paths(
+    git_dir: Path, common_dir: Path, gitconfig: Path | None
+) -> dict[str, Path]:
+    """The files whose contents `snapshot_repo_state` captures, by key.
+
+    Reads files only; it never runs git. The branch ref is included only when
+    HEAD names a branch (`ref: refs/heads/x`) and is keyed by its ref name.
+    """
+    paths = {
+        "config": common_dir / "config",
+        "config.worktree": git_dir / "config.worktree",
+        "HEAD": git_dir / "HEAD",
+    }
+    try:
+        head = (git_dir / "HEAD").read_text("utf-8", "replace").strip()
+    except OSError:
+        head = ""
+    if head.startswith("ref:"):
+        ref = head[len("ref:") :].strip()
+        paths[ref] = common_dir / ref
+    if gitconfig is not None:
+        paths["gitconfig"] = gitconfig
+    return paths
+
+
+def snapshot_repo_state(
+    git_dir: Path, common_dir: Path, gitconfig: Path | None
+) -> dict[str, bytes | None]:
+    """Raw bytes (None if missing) of the files a runaway test could rewrite."""
+    state: dict[str, bytes | None] = {}
+    for key, path in repo_state_paths(git_dir, common_dir, gitconfig).items():
+        try:
+            state[key] = path.read_bytes()
+        except OSError:
+            state[key] = None
+    return state
+
+
+def diff_repo_state(
+    before: dict[str, bytes | None], after: dict[str, bytes | None]
+) -> list[str]:
+    """Keys whose captured bytes differ between two snapshots."""
+    keys = before.keys() | after.keys()
+    return sorted(k for k in keys if before.get(k) != after.get(k))

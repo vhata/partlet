@@ -35,6 +35,7 @@ Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in `pyprojec
 - Behaviour changes come with a test at the lowest layer that can show the behaviour; Git behaviour (exports, history checks, clone and pull) is tested against real repositories built in the test, not mocks.
 - Documentation-only changes need no new tests; `docket/scripts/check-links.sh` covers their links.
 - An empty or skipped suite is a failed gate.
+- Tests run git in a sandbox: `tests/conftest.py` removes inherited `GIT_*` variables, points `HOME` and the global git config at a temporary directory, and sets `GIT_CEILING_DIRECTORIES` so no test can reach a real repository. A session tripwire fails the run, naming a backup to restore from, if this repository's git config, `HEAD` or branch ref, or the user's `~/.gitconfig` change during the run. `scripts/test.sh` also unsets git's repository variables before starting pytest.
 - No automatic retries. A flaky test is filed in `TODO.md` with its evidence and fixed or quarantined by name.
 
 ## Review inputs
