@@ -1,5 +1,8 @@
+import stat
+
 import pytest
 
+from partlet import store
 from partlet.store import LocalStore
 
 
@@ -41,3 +44,16 @@ def test_names_with_spaces_and_unicode(tmp_path):
 def test_rejects_bad_keys(tmp_path, key):
     with pytest.raises(ValueError):
         LocalStore(tmp_path).put(key, b"x")
+
+
+def test_put_files_are_readable_by_other_users(tmp_path, monkeypatch):
+    # The store reads the umask once at import, so pin the value it uses.
+    monkeypatch.setattr(store, "_UMASK", 0o022)
+    LocalStore(tmp_path).put("a/b.txt", b"x")
+    assert stat.S_IMODE((tmp_path / "a" / "b.txt").stat().st_mode) == 0o644
+
+
+def test_list_includes_project_files_named_like_temp_files(tmp_path):
+    s = LocalStore(tmp_path)
+    s.put("p/site/raw/.tmp-keep", b"x")
+    assert s.list("p/") == ["p/site/raw/.tmp-keep"]

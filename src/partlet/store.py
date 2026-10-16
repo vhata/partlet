@@ -7,6 +7,11 @@ import tempfile
 from pathlib import Path
 from typing import Protocol
 
+# Read the umask once without leaving it changed; os.umask can only set it.
+_UMASK = os.umask(0)
+os.umask(_UMASK)
+TMP_PREFIX = ".partlet-tmp-"
+
 
 class Store(Protocol):
     def get(self, key: str) -> bytes | None: ...
@@ -41,10 +46,17 @@ class LocalStore:
     def put(self, key: str, data: bytes, content_type: str | None = None) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        os.replace(tmp, path)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=TMP_PREFIX)
+        try:
+            # mkstemp creates the file 0600; previews must be readable by any
+            # static HTTP server, which may run as another user.
+            with os.fdopen(fd, "wb") as f:
+                os.fchmod(f.fileno(), 0o666 & ~_UMASK)
+                f.write(data)
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
@@ -55,7 +67,7 @@ class LocalStore:
         keys = (
             p.relative_to(self.root).as_posix()
             for p in self.root.rglob("*")
-            if p.is_file() and not p.name.startswith(".tmp-")
+            if p.is_file() and not p.name.startswith(TMP_PREFIX)
         )
         return sorted(k for k in keys if k.startswith(prefix))
 
