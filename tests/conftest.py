@@ -1,17 +1,35 @@
+"""Run every test with git cut off from real repositories and the user's config.
+
+Three layers, earliest first:
+
+1. At import, inherited `GIT_*` variables are removed from the process, so
+   nothing that happens during collection can act on an enclosing repository.
+2. `pytest_sessionstart` arms a tripwire on this project's own repository and
+   the user's git config, and `pytest_sessionfinish` fails the run if they
+   changed.
+3. The session fixture `_git_sandbox` moves HOME, the global git config and
+   the working directory into pytest's temporary area, and sets
+   GIT_CEILING_DIRECTORIES so repository discovery cannot leave it.
+"""
+
 import os
-import shutil
-import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 from helpers import (
     Repo,
-    diff_repo_state,
-    repo_state_paths,
+    RepoTripwire,
+    TripwireError,
     serve_directory,
-    snapshot_repo_state,
+    user_gitconfig_paths,
 )
+
+# Captured before anything is stripped; the tripwire needs the user's real
+# HOME, XDG_CONFIG_HOME and GIT_CONFIG_GLOBAL.
+_ORIGINAL_ENV = dict(os.environ)
+
+for _name in [k for k in os.environ if k.startswith("GIT_")]:
+    del os.environ[_name]
 
 _GITCONFIG = """\
 [user]
@@ -25,78 +43,44 @@ _GITCONFIG = """\
 \tgpgsign = false
 """
 
-
-def _without_git_vars(env):
-    return {k: v for k, v in env.items() if not k.startswith("GIT_")}
+_tripwire: RepoTripwire | None = None
 
 
-def _locate_own_repo() -> tuple[Path, Path] | None:
-    """The git dir and common dir of the checkout holding these tests, if any."""
-    here = Path(__file__).resolve().parent
-    try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "--absolute-git-dir", "--git-common-dir"],
-            cwd=here,
-            env=_without_git_vars(os.environ),
-            capture_output=True,
-            check=True,
-            text=True,
-        )
-        git_dir, common_dir = proc.stdout.splitlines()[:2]
-    except (OSError, subprocess.CalledProcessError, ValueError):
-        return None
-    return Path(git_dir), (here / common_dir).resolve()
-
-
-def _backup(state, paths, backup_dir: Path) -> None:
-    manifest = []
-    for key, path in paths.items():
-        data = state[key]
-        if data is None:
-            manifest.append(f"{key}\t{path}\t(missing)")
-            continue
-        (backup_dir / key.replace("/", "__")).write_bytes(data)
-        manifest.append(f"{key}\t{path}\t{key.replace('/', '__')}")
-    (backup_dir / "MANIFEST.txt").write_text("\n".join(manifest) + "\n")
-
-
-@pytest.fixture(scope="session")
-def _repo_tripwire():
-    """Fail the run if this repository's git state or ~/.gitconfig changes.
-
-    Must run before `_git_sandbox` replaces HOME, so that it sees the real
-    ~/.gitconfig. Disabled outside a git checkout.
-    """
-    located = _locate_own_repo()
-    if located is None:
-        yield
-        return
-    git_dir, common_dir = located
-    gitconfig = Path(os.environ.get("HOME", "~")).expanduser() / ".gitconfig"
-    paths = repo_state_paths(git_dir, common_dir, gitconfig)
-    before = snapshot_repo_state(git_dir, common_dir, gitconfig)
-    backup_dir = Path(tempfile.mkdtemp(prefix="partlet-tripwire-"))
-    _backup(before, paths, backup_dir)
-    yield
-    after = snapshot_repo_state(git_dir, common_dir, gitconfig)
-    changed = diff_repo_state(before, after)
-    if not changed:
-        shutil.rmtree(backup_dir, ignore_errors=True)
-        return
-    # A changed ref may not have been in the original key set.
-    after_paths = repo_state_paths(git_dir, common_dir, gitconfig)
-    lines = [f"  {key}: {paths.get(key) or after_paths.get(key)}" for key in changed]
-    raise RuntimeError(
-        "The test run changed a real git file outside its sandbox:\n"
-        + "\n".join(lines)
-        + f"\nOriginal contents are backed up in {backup_dir}"
-        + " (see MANIFEST.txt); restore from there."
+def pytest_sessionstart(session):
+    global _tripwire
+    _tripwire = RepoTripwire(
+        Path(__file__).resolve().parent, user_gitconfig_paths(_ORIGINAL_ENV)
     )
 
 
+def pytest_sessionfinish(session, exitstatus):
+    if _tripwire is None:
+        return
+    try:
+        _tripwire.check()
+    except TripwireError as exc:
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.write_sep("=", "REPOSITORY TRIPWIRE FIRED", red=True, bold=True)
+            reporter.write_line(str(exc))
+        else:
+            print(exc)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_terminal_summary(terminalreporter):
+    if _tripwire is not None:
+        for note in _tripwire.notes:
+            terminalreporter.write_line(note, yellow=True)
+
+
 def _ceiling_dirs(base: Path) -> str:
-    forms = [str(base), str(base.resolve())]
-    # On macOS /var is a symlink to /private/var, and likewise /tmp.
+    # Git never treats the starting directory itself as a ceiling, so the
+    # ceiling is basetemp's parent: even a git call run directly in basetemp
+    # cannot climb out. On macOS the temp path can appear as /var/... and as
+    # /private/var/..., so list every form.
+    parent = base.parent
+    forms = [str(parent), str(parent.resolve())]
     for form in list(forms):
         if form.startswith("/private/"):
             short = form[len("/private") :]
@@ -106,12 +90,15 @@ def _ceiling_dirs(base: Path) -> str:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _git_sandbox(tmp_path_factory, _repo_tripwire):
+def _git_sandbox(tmp_path_factory):
     """Run every test with git cut off from the user's real repositories and config."""
+    base = tmp_path_factory.getbasetemp()
     home = tmp_path_factory.mktemp("home")
     (home / ".config").mkdir()
     gitconfig = home / ".gitconfig"
     gitconfig.write_text(_GITCONFIG)
+    cwd = base / "cwd"
+    cwd.mkdir()
     with pytest.MonkeyPatch.context() as mp:
         for name in [k for k in os.environ if k.startswith("GIT_")]:
             mp.delenv(name)
@@ -119,9 +106,9 @@ def _git_sandbox(tmp_path_factory, _repo_tripwire):
         mp.setenv("XDG_CONFIG_HOME", str(home / ".config"))
         mp.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
         mp.setenv("GIT_CONFIG_NOSYSTEM", "1")
-        mp.setenv(
-            "GIT_CEILING_DIRECTORIES", _ceiling_dirs(tmp_path_factory.getbasetemp())
-        )
+        mp.setenv("GIT_CEILING_DIRECTORIES", _ceiling_dirs(base))
+        # Relative paths and Path.cwd() must not lead back to the real checkout.
+        mp.chdir(cwd)
         yield
 
 
