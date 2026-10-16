@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Prepare this worktree: install the git hooks. Idempotent; run after
-# cloning, creating a worktree, or changing hook configuration.
+# Prepare this worktree: create its .venv, install the package with its dev
+# dependencies, and install the git hooks. Idempotent; run after cloning,
+# creating a worktree, or changing dependencies or hook configuration.
 # Worker dependencies are added here when the Worker lands.
 set -euo pipefail
 cd "$(dirname "$0")/.."

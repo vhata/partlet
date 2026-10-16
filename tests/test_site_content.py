@@ -81,19 +81,16 @@ def test_markdown_escapes_raw_html():
 
 
 def test_markdown_rewrites_links_and_images():
-    # Adjacent literals keep "](" out of this file, which docket's link checker would flag.
-    # fmt: off
-    html = render_markdown("[x]" "(x.md) ![i]" "(img.png) [ext](https://e.com)\n", "docs", make_linker())
-    # fmt: on
+    html = render_markdown(
+        "[x](x.md) ![i](img.png) [ext](https://e.com)\n", "docs", make_linker()
+    )
     assert 'href="/foo/blob/docs/x.md"' in html
     assert 'src="/foo/raw/docs/img.png"' in html
     assert 'href="https://e.com"' in html
 
 
 def test_markdown_drops_javascript_links():
-    # fmt: off
-    html = render_markdown("[x]" "(javascript:alert(1))\n", "", make_linker())
-    # fmt: on
+    html = render_markdown("[x](javascript:alert(1))\n", "", make_linker())
     assert 'href="javascript' not in html
 
 
