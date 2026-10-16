@@ -38,13 +38,6 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 
 ### Unprioritized
 
-- [WORKER] `worker-plan` — **Write the implementation plan for the Cloudflare Worker.** Plan 2 of 3 from the design spec; written once the publisher core shows what the stored layout looks like in practice.
-  - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
-  - Depends on: `publisher-core`
-- [ACTION] `r2-publishing-plan` — **Write the implementation plan for publishing to R2.** Plan 3 of 3: R2 store, gitleaks, `partlet review`, `publish` and `unpublish`, the composite action and the end-to-end test.
-  - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
-  - Depends on: `publisher-core`
-
 ## Ready for separate work
 
 ### P0 Critical
@@ -57,6 +50,13 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 
 ### Unprioritized
 
-- [PUBLISHER] `publisher-core` — **Implement the publisher core plan, ending in a working `partlet build`.** First buildable slice of the design; everything else builds on its storage layout.
+- [WORKER] `worker-plan` — **Write the implementation plan for the Cloudflare Worker.** Plan 2 of 3 from the design spec; written once the publisher core shows what the stored layout looks like in practice.
   - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
-  - Starting point: Task 1 of plans/2026-10-15-publisher-core.md
+  - The pages link `/<name>/tree/<dir>`; the publisher stores that page as `p/<name>/site/<build>/tree/<dir>/index.html`, and the project page as `.../site/<build>/index.html`.
+- [ACTION] `r2-publishing-plan` — **Write the implementation plan for publishing to R2.** Plan 3 of 3: R2 store, gitleaks, `partlet review`, `publish` and `unpublish`, the composite action and the end-to-end test.
+  - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
+  - The export needs a local `refs/heads/<branch>` in the monorepo checkout and fails with "branch ... not found" without one; the action's checkout step must provide it.
+- [PUBLISHER] `publish-orphan-sweep` — **Delete keys left behind by an interrupted publish.** Packs, site builds and archives uploaded by a publish that dies before writing `cleanup.json` are listed nowhere, so the next publish never removes them, although the design spec promises it does.
+  - Source: todo/publisher-core, 2026-10-15
+  - A crash after the pointers and `current` move but before `cleanup.json` is written also loses the superseded keys, and the next run then takes the `unchanged` shortcut.
+  - Any sweep must keep the previous build, archives and superseded packs for one publish of grace (see `docs/DECISIONS.md`). Nothing live is deleted today; the cost is leaked storage, which matters most once the R2 store lands.
