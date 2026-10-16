@@ -240,6 +240,15 @@ class TripwireError(Exception):
     """The test run changed a real git file."""
 
 
+def tripwire_exit_status(current: int) -> int:
+    """The exit status once the tripwire has fired: fail a passing run only.
+
+    Any other status (failures, INTERRUPTED, INTERNAL_ERROR) already says the
+    run went wrong, and replacing it would hide which way.
+    """
+    return 1 if current == 0 else current
+
+
 def _text(data: bytes | None) -> list[str]:
     return [] if data is None else data.decode("utf-8", "replace").splitlines()
 

@@ -15,6 +15,7 @@ from helpers import (
     TripwireError,
     diff_repo_state,
     snapshot_repo_state,
+    tripwire_exit_status,
     user_gitconfig_paths,
 )
 
@@ -223,6 +224,24 @@ def test_tripwire_ignores_unrelated_branches_and_packing(linked):
     git("branch", "elsewhere", cwd=main.path)
     git("pack-refs", "--all", "--prune", cwd=main.path)
     tripwire.check()
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.ExitCode.TESTS_FAILED,
+        pytest.ExitCode.INTERRUPTED,
+        pytest.ExitCode.INTERNAL_ERROR,
+        pytest.ExitCode.USAGE_ERROR,
+        pytest.ExitCode.NO_TESTS_COLLECTED,
+    ],
+)
+def test_tripwire_keeps_any_other_failing_exit_status(status):
+    assert tripwire_exit_status(status) == status
+
+
+def test_tripwire_fails_a_passing_run():
+    assert tripwire_exit_status(pytest.ExitCode.OK) == pytest.ExitCode.TESTS_FAILED
 
 
 def test_tripwire_reports_config_change_with_diff_and_backup(linked):

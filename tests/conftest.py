@@ -21,6 +21,7 @@ from helpers import (
     RepoTripwire,
     TripwireError,
     serve_directory,
+    tripwire_exit_status,
     user_gitconfig_paths,
 )
 
@@ -66,7 +67,7 @@ def pytest_sessionfinish(session, exitstatus):
             reporter.write_line(str(exc))
         else:
             print(exc)
-        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        session.exitstatus = tripwire_exit_status(exitstatus)
 
 
 def pytest_terminal_summary(terminalreporter):
