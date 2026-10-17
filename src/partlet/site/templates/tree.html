@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% if directory %}/{{ directory }}{% endif %}{% endblock %}
+{% block main %}
+<nav class="crumbs">{% for label, url in crumbs %}<a href="{{ url }}">{{ label }}</a>{% if not loop.last %} / {% endif %}{% endfor %}</nav>
+{% if not directory %}
+<section class="project">
+  {% if project.description %}<p class="description">{{ project.description }}</p>{% endif %}
+  <pre class="clone">git clone {{ clone_url }}</pre>
+  <p class="downloads">Download: {% for fmt, url in archives %}<a href="{{ url }}">{{ fmt }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  <p class="tip">Commit <code>{{ project.tip[:12] }}</code>, updated {{ project.updated }}</p>
+</section>
+{% endif %}
+<table class="listing">
+{% for name, url in subdirs %}<tr><td class="dir"><a href="{{ url }}">{{ name }}/</a></td><td></td></tr>
+{% endfor %}{% for name, url, size in files %}<tr><td class="file"><a href="{{ url }}">{{ name }}</a></td><td class="size">{{ size }}</td></tr>
+{% endfor %}
+</table>
+{% if readme_html %}<article class="readme">{{ readme_html | safe }}</article>{% endif %}
+{% endblock %}

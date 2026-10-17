@@ -16,23 +16,26 @@ Each check is a standalone script in `scripts/` or `docket/scripts/`, runnable f
 
 | Script | Runs | Pre-commit | Pre-push | CI on PR | CI on main | Scheduled |
 | --- | --- | --- | --- | --- | --- | --- |
-| `scripts/lint.sh` | shellcheck over `scripts/*.sh` and `.githooks/*` | via `check.sh` | | via `check.sh` | via `check.sh` | |
+| `scripts/fmt-check.sh` | `ruff format --check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/lint.sh` | shellcheck over `scripts/*.sh` and `.githooks/*`, then `ruff check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/test.sh` | pytest; fails on an empty collection | | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `docket/scripts/ci.sh` | queue hygiene, Markdown links, PR markers against the queues | | | yes | yes | |
 | `docket/scripts/check-queues.sh --strict` | queue hygiene | yes | | via `ci.sh` | via `ci.sh` | |
 | `docket/scripts/check-links.sh` | relative Markdown links resolve | yes | | via `ci.sh` | via `ci.sh` | |
-| `scripts/check.sh` | the gates listed in its `gates` array, in order: currently `lint` | yes | | yes | yes | |
+| `scripts/check.sh` | the gates in its `gates` array, in order: `fmt-check`, `lint`, `test` | | yes | yes | yes | |
 
-`scripts/check.sh` is the composite entry point: `ci.yml` runs it rather than the gates individually. There is no Python or Worker code yet, so there are no format, type-check or test gates; each is added to `scripts/check.sh`, `ci.yml` and this table in the PR that adds the code it checks.
+`scripts/check.sh` is the composite entry point: `ci.yml` runs it rather than the gates individually. There is no Worker code yet, so it has no gates; they join `scripts/check.sh`, `ci.yml` and this table in the PR that adds the Worker.
 
-Hooks are a tracked `.githooks/` directory, wired with `git config core.hooksPath .githooks` by `bash scripts/setup.sh`. Pre-commit checks only; it never rewrites files. It runs on the whole working tree, which takes under a second at present. Bypassing a hook is for a broken toolchain only; state the bypass and the equivalent checks in the PR.
+Hooks are a tracked `.githooks/` directory, wired with `git config core.hooksPath .githooks` by `bash scripts/setup.sh`. Pre-commit runs the format check, lint and the queue and link validators on the whole working tree; it only checks and never rewrites files. Pre-push runs `bash scripts/check.sh`, including the test suite. Bypassing a hook is for a broken toolchain only; state the bypass and the equivalent checks in the PR.
 
-Toolchain pins: none yet.
+Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in `pyproject.toml`; git 2.31 or newer (`rev-parse --path-format`). Bumping a pin is its own PR.
 
 ## Test policy
 
 - Behaviour changes come with a test at the lowest layer that can show the behaviour; Git behaviour (exports, history checks, clone and pull) is tested against real repositories built in the test, not mocks.
 - Documentation-only changes need no new tests; `docket/scripts/check-links.sh` covers their links.
 - An empty or skipped suite is a failed gate.
+- Tests run git in a sandbox: `tests/conftest.py` removes inherited `GIT_*` variables when it is imported, points `HOME` and the global git config at a temporary directory, moves the process into a directory under pytest's base temp, and sets `GIT_CEILING_DIRECTORIES` so no test can reach a real repository. A tripwire armed at session start fails the run, with a diff and a backup to compare against, if this repository's git config, `HEAD`, branch refs (including the main checkout's `HEAD` and `main`), the worktree's `.git` file, or the user's global git config change during the run. `scripts/test.sh` also unsets git's repository variables before starting pytest.
 - No automatic retries. A flaky test is filed in `TODO.md` with its evidence and fixed or quarantined by name.
 
 ## Review inputs
@@ -40,7 +43,7 @@ Toolchain pins: none yet.
 Read by `docket/CODE_REVIEW_GUIDE.md`, which links this section by its heading, so keep the heading as it is; a codebase review runs and records exactly what is listed here.
 
 - Focus areas: the properties under [What quality means here](#what-quality-means-here) and the design in `docs/specs/`.
-- Baseline commands beyond `bash scripts/check.sh`: none yet.
+- Baseline commands beyond `bash scripts/check.sh`: `partlet build --out <dir>` against a synthetic monorepo, then `git clone` from that directory served over HTTP.
 - Drift checks for an incremental review: this document against `.githooks/`, `scripts/` and `.github/workflows/`; plan status in `plans/` against merged work.
 - Source paths for `bash docket/scripts/review-due.sh --paths "src worker scripts"`.
 - Expected tracked files: Markdown, shell scripts, YAML under `.github/`, `.githooks/*`, `LICENSE`, `.gitignore`; Python, TOML, TypeScript, JSON, HTML and CSS once the publisher and Worker land.

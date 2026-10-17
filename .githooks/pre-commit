@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Runs on the whole working tree, not just the staged files; it only
+# Fast gates on the whole working tree, not just the staged files; it only
 # checks and never rewrites. Installed by scripts/setup.sh.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-bash scripts/check.sh
+bash scripts/fmt-check.sh
+bash scripts/lint.sh
 bash docket/scripts/check-queues.sh --strict
 bash docket/scripts/check-links.sh

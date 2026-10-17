@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}/{{ path }}{% endblock %}
+{% block main %}
+<nav class="crumbs">{% for label, url in crumbs %}<a href="{{ url }}">{{ label }}</a> / {% endfor %}{{ name }}</nav>
+<p class="fileinfo">{{ size }} · <a href="{{ raw_url }}">raw</a></p>
+{% if symlink_target is not none %}
+<p>Symbolic link to <code>{{ symlink_target }}</code></p>
+{% elif body_html %}
+{{ body_html | safe }}
+{% else %}
+<p>This file is binary or too large and is not shown. <a href="{{ raw_url }}">Download the raw file</a>.</p>
+{% endif %}
+{% endblock %}

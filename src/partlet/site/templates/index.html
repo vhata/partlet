@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block main %}
+<h1>Projects</h1>
+<table class="listing">
+{% for p in projects %}<tr><td><a href="/{{ p.name }}">{{ p.name }}</a></td><td>{{ p.description }}</td><td><code>{{ p.tip[:12] }}</code></td><td class="size">{{ p.updated }}</td></tr>
+{% endfor %}
+</table>
+{% endblock %}
