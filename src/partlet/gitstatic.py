@@ -9,6 +9,7 @@ from partlet.gitutil import git_out
 from partlet.store import Store
 
 MAX_PACKS = 20
+PACK_EXTS = ("pack", "idx")
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,6 @@ class GitState:
 class PackPlan:
     tip: str
     packs: tuple[str, ...]
-    superseded: tuple[str, ...]
 
 
 def read_state(store: Store, git_prefix: str) -> GitState:
@@ -38,11 +38,6 @@ def read_state(store: Store, git_prefix: str) -> GitState:
         if line.startswith("P ")
     )
     return GitState(tip, packs)
-
-
-def _pack_keys(git_prefix: str, pack: str) -> tuple[str, str]:
-    base = f"{git_prefix}/objects/pack/{pack}"
-    return f"{base}.pack", f"{base}.idx"
 
 
 def upload_pack(
@@ -68,17 +63,30 @@ def upload_pack(
         input=revs.encode(),
     )
     pack = f"pack-{digest}"
-    for key, ext in zip(_pack_keys(git_prefix, pack), ("pack", "idx")):
-        store.put(key, (workdir / f"{pack}.{ext}").read_bytes())
+    for ext in PACK_EXTS:
+        store.put(
+            f"{git_prefix}/objects/pack/{pack}.{ext}",
+            (workdir / f"{pack}.{ext}").read_bytes(),
+        )
+    return PackPlan(new_tip, (pack,) if consolidate else (*old.packs, pack))
 
-    packs = (pack,) if consolidate else (*old.packs, pack)
-    dropped = [p for p in old.packs if p not in packs] if consolidate else []
-    superseded = tuple(k for p in dropped for k in _pack_keys(git_prefix, p))
-    return PackPlan(new_tip, packs, superseded)
 
-
-def write_pointers(store: Store, git_prefix: str, plan: PackPlan) -> None:
-    info_packs = "".join(f"P {p}.pack\n" for p in plan.packs) + "\n"
+def _put_pack_list(store: Store, git_prefix: str, packs: tuple[str, ...]) -> None:
+    info_packs = "".join(f"P {p}.pack\n" for p in packs) + "\n"
     store.put(f"{git_prefix}/objects/info/packs", info_packs.encode())
+
+
+def write_pointers(
+    store: Store, git_prefix: str, plan: PackPlan, old: GitState
+) -> None:
+    """Move the pack list and refs to `plan`, never leaving refs short of a pack.
+
+    A plan that drops packs lists the old and new packs together until
+    `info/refs` has moved, then writes its own list.
+    """
+    dropped = tuple(p for p in old.packs if p not in plan.packs)
+    _put_pack_list(store, git_prefix, (*dropped, *plan.packs))
     store.put(f"{git_prefix}/info/refs", f"{plan.tip}\trefs/heads/main\n".encode())
     store.put(f"{git_prefix}/HEAD", b"ref: refs/heads/main\n")
+    if dropped:
+        _put_pack_list(store, git_prefix, plan.packs)

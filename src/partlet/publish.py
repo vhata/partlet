@@ -11,7 +11,7 @@ from typing import Literal
 from partlet import __version__
 from partlet.archive import ARCHIVE_FORMATS, make_archives
 from partlet.export import ExportError, export_project
-from partlet.gitstatic import read_state, upload_pack, write_pointers
+from partlet.gitstatic import PACK_EXTS, read_state, upload_pack, write_pointers
 from partlet.gitutil import GitError, git_out
 from partlet.history import HistoryError, check_history
 from partlet.manifest import Manifest, Project, Site
@@ -55,25 +55,31 @@ def _put_json(store: Store, key: str, value) -> None:
     )
 
 
-def _run_cleanup(store: Store, prefix: str, current: dict | None) -> None:
-    # cleanup.json can be stale: a publish that died after `current` but before
-    # cleanup.json may have brought listed keys back to life. Never delete those.
-    live = {
-        key
-        for pack in read_state(store, f"{prefix}/git").packs
-        for key in (
-            f"{prefix}/git/objects/pack/{pack}.pack",
-            f"{prefix}/git/objects/pack/{pack}.idx",
-        )
-    }
-    live_build = None
-    if current:
-        live_build = f"{prefix}/site/{current['build']}/"
-        live |= {f"{prefix}/archive/{current['tip']}.{fmt}" for fmt in ARCHIVE_FORMATS}
-    for key in _read_json(store, f"{prefix}/cleanup.json") or []:
-        if key in live or (live_build and key.startswith(live_build)):
-            continue
-        store.delete(key)
+def _sweep(store: Store, prefix: str) -> None:
+    """Delete every pack, site build and archive that no pointer names.
+
+    Kept: the packs `objects/info/packs` lists, the build and archives
+    `current` names, and what was live before the publish that wrote
+    `current`, which it records as `previous`; that is the one publish of grace
+    for superseded keys. Anything else was superseded earlier or uploaded by a
+    publish that died before naming it.
+    """
+    current = _read_json(store, f"{prefix}/current") or {}
+    previous = current.get("previous") or {}
+    packs = {*read_state(store, f"{prefix}/git").packs, *previous.get("packs", ())}
+    keep = {f"{prefix}/git/objects/pack/{p}.{ext}" for p in packs for ext in PACK_EXTS}
+    builds: list[str] = []
+    for gen in (current, previous):
+        if gen.get("build"):
+            builds.append(f"{prefix}/site/{gen['build']}/")
+        if gen.get("tip"):
+            keep |= {f"{prefix}/archive/{gen['tip']}.{f}" for f in ARCHIVE_FORMATS}
+    for area in ("git/objects/pack/", "site/", "archive/"):
+        for key in store.list(f"{prefix}/{area}"):
+            if key not in keep and not key.startswith(tuple(builds)):
+                store.delete(key)
+    # Superseded-key list written before 2026-10-17; nothing reads it now.
+    store.delete(f"{prefix}/cleanup.json")
 
 
 def publish_project(
@@ -101,10 +107,8 @@ def publish_project(
         current = _read_json(store, f"{prefix}/current")
         build = build_id(tip, project.description, site.base_url)
         if decision.action == "unchanged" and current and current.get("build") == build:
+            _sweep(store, prefix)
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
-
-        _run_cleanup(store, prefix, current)
-        superseded: list[str] = []
 
         # 1. New objects first: nothing references them yet.
         plan = None
@@ -118,7 +122,6 @@ def publish_project(
                 pdir / "packs",
                 full=decision.action == "rewrite",
             )
-            superseded += plan.superseded
 
         updated = git_out("show", "-s", "--format=%cI", tip, cwd=repo)
         info = ProjectInfo(
@@ -131,7 +134,7 @@ def publish_project(
 
         # 2. Pointers, so refs never name objects that are not uploaded yet.
         if plan is not None:
-            write_pointers(store, f"{prefix}/git", plan)
+            write_pointers(store, f"{prefix}/git", plan, state)
         _put_json(
             store,
             f"{prefix}/current",
@@ -141,19 +144,18 @@ def publish_project(
                 "tip": tip,
                 "build": build,
                 "updated": updated,
+                # What was live until now, kept for one publish of grace.
+                "previous": {
+                    "build": (current or {}).get("build"),
+                    "tip": (current or {}).get("tip"),
+                    "packs": list(state.packs),
+                },
             },
         )
 
-        # 3. Record what is now unreferenced; the next publish deletes it.
-        if current:
-            if current.get("build") != build:
-                superseded += store.list(f"{prefix}/site/{current['build']}/")
-            if current.get("tip") != tip:
-                superseded += [
-                    f"{prefix}/archive/{current['tip']}.{fmt}"
-                    for fmt in ARCHIVE_FORMATS
-                ]
-        _put_json(store, f"{prefix}/cleanup.json", sorted(set(superseded)))
+        # 3. Delete what the publish before this one superseded, and anything
+        # an interrupted publish left behind.
+        _sweep(store, prefix)
         reason = "re-rendered" if decision.action == "unchanged" else decision.reason
         return ProjectResult(project.name, "published", tip, reason)
     except (ExportError, HistoryError, GitError) as e:
