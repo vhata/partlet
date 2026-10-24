@@ -11,3 +11,27 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 ## P3 Low
 
 ## Unprioritized
+
+- [SITE] `site-directory-key-layout` — **Make directory page keys representable by the local store.** A directory named `index.html` currently collides with its parent's page and fails publication.
+  - Source: review/2026-10-24-0250-full.md, 2026-10-24
+  - Starting point: `src/partlet/site/render.py:107`; coordinate the chosen layout with the future Worker route lookup.
+  - Findings: `site-directory-index-key-collision`
+  - Validation: publish an approved project containing `docs/index.html/leaf.txt` into a LocalStore; require success, distinct readable directory pages and a working clone.
+
+- [SITE] `site-git-path-identity` — **Preserve distinct Git filenames through site rendering or fail explicitly.** UTF-8 replacement decoding currently merges byte-distinct paths and silently overwrites raw and blob output.
+  - Source: review/2026-10-24-0250-full.md, 2026-10-24
+  - Starting point: `src/partlet/site/tree.py:44` and the renderer's raw/blob dictionaries.
+  - Findings: `site-lossy-git-filename-decoding`
+  - Validation: construct a real Git tree containing `file-\xfe.txt` and `file-\xff.txt` with different content; require reversible distinct output identities or an explicit failure before pointers move.
+
+- [TOOLING] `test-collection-git-isolation` — **Establish Git isolation before test modules are collected.** Import-time test code can still discover the enclosing checkout and original user configuration before the session fixture starts.
+  - Source: review/2026-10-24-0250-full.md, 2026-10-24
+  - Starting point: `tests/conftest.py:50` and `tests/conftest.py:94`; capture and arm the tripwire before entering isolation.
+  - Findings: `collection-before-git-sandbox`
+  - Validation: use a synthetic enclosing repository and original HOME; at module import, a read-only Git discovery probe must not find that repository and configuration must already be isolated. Keep existing sandbox/tripwire checks passing.
+
+- [PUBLISHER] `export-qualified-branch` — **Resolve export preflight paths against the exact publishing branch.** A same-named tag currently shadows a valid branch directory and stops export.
+  - Source: review/2026-10-24-0250-full.md, 2026-10-24
+  - Starting point: `src/partlet/export.py:74` (`_require_directory`).
+  - Findings: `export-branch-tag-shadow`
+  - Validation: create tag `main` before adding a project to branch `main`, then export; require success and the branch's actual contents. A missing branch or directory must still fail.
