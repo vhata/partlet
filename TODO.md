@@ -50,9 +50,6 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 
 ### Unprioritized
 
-- [WORKER] `worker-plan` — **Write the implementation plan for the Cloudflare Worker.** Plan 2 of 3 from the design spec; written once the publisher core shows what the stored layout looks like in practice.
-  - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
-  - The pages link `/<name>/tree/<dir>`; the publisher stores that page as `p/<name>/site/<build>/tree/<dir>/index.html`, and the project page as `.../site/<build>/index.html`.
 - [ACTION] `r2-publishing-plan` — **Write the implementation plan for publishing to R2.** Plan 3 of 3: R2 store, gitleaks, `partlet review`, `publish` and `unpublish`, the composite action and the end-to-end test.
   - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
   - The export needs a local `refs/heads/<branch>` in the monorepo checkout and fails with "branch ... not found" without one; the action's checkout step must provide it.
