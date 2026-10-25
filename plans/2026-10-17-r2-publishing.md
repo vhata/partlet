@@ -20,7 +20,7 @@ This is plan 3 of 3.
 
 ### Dependencies
 
-- **`publish-orphan-sweep` must have landed first.** This plan builds on that branch's design. `cleanup.json` is gone. Every publish, including one that takes the `unchanged` shortcut, ends with `_sweep`, which deletes every key under a project's `git/objects/pack/`, `site/` and `archive/` that neither the live pointers nor `current["previous"]` name. `PackPlan.superseded` is removed and `gitstatic.PACK_EXTS` is added. The sweep uses the existing `Store.list(prefix)`, so `R2Store.list` must page past R2's 1000-key limit (Task 6 tests this with a page size of 2). If the sweep lands with a different shape, adjust the snippets in Tasks 4, 8 and 9 that touch `publish.py`; the rest of this plan does not depend on the sweep's internals. All code below was run on top of that branch as committed (`ad7b504`), most recently on 2026-10-24. That commit's sweep also deletes a leftover `cleanup.json`, so Task 7 counts one more delete per run.
+- **`publish-orphan-sweep` must have landed first.** This plan builds on that branch's design. `cleanup.json` is gone. Every publish, including one that takes the `unchanged` shortcut, ends with `_sweep`, which deletes every key under a project's `git/objects/pack/`, `site/` and `archive/` that neither the live pointers nor `current["previous"]` name. `PackPlan.superseded` is removed and `gitstatic.PACK_EXTS` is added. The sweep uses the existing `Store.list(prefix)`, so `R2Store.list` must page past R2's 1000-key limit (Task 6 tests this with a page size of 2). If the sweep lands with a different shape, adjust the snippets in Tasks 4, 8 and 9 that touch `publish.py`; the rest of this plan does not depend on the sweep's internals. All code below was run on top of that branch as committed (`ad7b504`), most recently on 2026-10-25. That commit's sweep also deletes a leftover `cleanup.json`, so Task 7 counts one more delete per run.
 - **Task 13 (end-to-end test) depends on plan 2's Worker.** It assumes this interface, matching plan 1's store layout:
   - `worker/package.json` lists `wrangler` as a dev dependency with a lockfile, so `npm ci` in `worker/` provides `worker/node_modules/.bin/wrangler`;
   - `worker/wrangler.toml` declares an R2 binding named `BUCKET` and a `SOURCE` variable;
@@ -51,7 +51,7 @@ Behaviour this plan relies on, and where it was checked:
 - R2's PutObject supports `If-None-Match: *`; with concurrent writers "at most one write succeeds and the others fail with `412 PreconditionFailed`" (R2 docs, "S3 API compatibility"). moto 5.2.4 behaves the same (checked locally).
 - R2's boto3 example uses `endpoint_url="https://<ACCOUNT_ID>.r2.cloudflarestorage.com"` and `region_name="auto"`. Jurisdiction buckets use `<ACCOUNT_ID>.eu.` or `.fedramp.` endpoints (R2 docs, boto3 example and API tokens). The checksum settings in Task 6 are a defensive choice; the current R2 boto3 page does not ask for them.
 - gitleaks: `gitleaks git` scans a bare repository; `--log-opts`, `--redact`, `--report-format json`, `--report-path`, `--gitleaks-ignore-path` and `--config` behave as Task 3 uses them. Exit code 1 means both "leaks found" and "error", so Task 3 passes `--exit-code 0` and reads findings from the report. Checked with 8.30.1 on a scratch repository.
-- gitleaks runs `git log -p`, which prints no diff for merge commits, so by default a secret that a merge itself introduces is never scanned. With `--log-opts "--diff-merges=remerge ..."` (git 2.36 or newer) a two-parent merge shows only what it adds beyond git's own automatic merge. Remerge-diff skips merges with more than two parents, so those get a second pass with `-m`. gitleaks' git also reads the user's git config, and `diff.noprefix` changes the paths, and so the fingerprints, it reports. All of this was checked with gitleaks 8.30.1 and git 2.56.0 on scratch repositories (git documentation, `git log --diff-merges`).
+- gitleaks runs `git log -p`, which prints no diff for merge commits by default. `--log-opts "--diff-merges=first-parent refs/heads/main"` shows each merge against its first parent, including octopus merges, while still traversing every reachable commit. Do not add the traversal option `--first-parent`: it would hide a secret deleted on a side branch before the merge. Ordinary diffs preserve repository-relative paths for custom rules and allowlists; remerge-diff does not with gitleaks 8.30.1 when a conflict header precedes the hunk. A secret imported from a side branch can have a native fingerprint at both its origin and the importing merge; accepted findings need every reported fingerprint. gitleaks' git runs without the user's global or system config so `diff.noprefix` cannot change paths and fingerprints. Checked with gitleaks 8.30.1 and git 2.56.0 on scratch repositories; the diff option is documented in git 2.31 (git documentation, `git log --diff-merges`).
 - Composite actions: every `run` step needs `shell`; inputs are not exported as `INPUT_*` variables; `github.action_path` locates the action's files (GitHub Docs, "Metadata syntax").
 - `getPlatformProxy({ persist: { path: "<dir>/v3" } })` shares local storage with `wrangler dev --persist-to <dir>` (wrangler API docs), and `wrangler dev --local` disables remote bindings (wrangler commands docs). Both were checked together with wrangler 4.151.1.
 
@@ -68,7 +68,7 @@ Behaviour this plan relies on, and where it was checked:
 - Order within one run: take `<source>/lock`. Then, per project: export, history check, the secret scan of the full export history (only if anything will be uploaded), pack files, site build, archives, `objects/info/packs`, `info/refs`, `HEAD`, `current`, then the sweep. After all projects, the site index. The lock is released last.
 - Only one run may touch a source at a time. The monorepo workflow declares a `concurrency` group with `cancel-in-progress: false`, and every `build`, `publish` and `unpublish` run holds the store lock. A held lock fails the run; it never waits and never breaks a lock on its own.
 - R2 settings come from `PARTLET_R2_ACCOUNT_ID`, `PARTLET_R2_ACCESS_KEY_ID`, `PARTLET_R2_SECRET_ACCESS_KEY`, `PARTLET_R2_BUCKET` and optionally `PARTLET_R2_ENDPOINT`. The two key variables are removed from the process environment as soon as they are read, before any child process starts.
-- Pinned tools: gitleaks exactly `8.30.1`, installed only by `scripts/install-gitleaks.sh` with a per-platform SHA-256; git-filter-repo exactly `2.47.0` in `pyproject.toml` and `action/requirements.txt`. `partlet publish`, `partlet review` and `partlet build --scan` refuse any other version. The action installs uv 0.13.5, checked against its SHA-256, without the Actions cache. Git must be 2.36 or newer (remerge-diff); `check_tools` refuses older. Bumping any pin is its own PR (docs/QUALITY.md).
+- Pinned tools: gitleaks exactly `8.30.1`, installed only by `scripts/install-gitleaks.sh` with a per-platform SHA-256; git-filter-repo exactly `2.47.0` in `pyproject.toml` and `action/requirements.txt`. `partlet publish`, `partlet review` and `partlet build --scan` refuse any other version. The action installs uv 0.13.5, checked against its SHA-256, without the Actions cache. Git must be 2.31 or newer (the existing floor, also supporting first-parent merge diffs); `check_tools` refuses older. Bumping any pin is its own PR (docs/QUALITY.md).
 - No test opens a TCP connection to anything but a loopback address, and no test sees real credentials or GitHub Actions' output files (Task 1). The guard covers `connect` only: DNS lookups and UDP `sendto` are not blocked, but nothing in the suite sends credentials that way. The R2 store is tested only against a moto server on `127.0.0.1`.
 - The fake secret used in tests is assembled at run time (`"ghp_" + ...`), so no tracked file contains a string shaped like a GitHub token.
 - Agents never create or change billable or shared resources: R2 buckets, API tokens, Worker deployments, GitHub secrets, repository settings, release tags. Steps that do are marked **USER STEP** and collected under "User-run steps" at the end; agents write the instructions and stop.
@@ -79,12 +79,12 @@ Behaviour this plan relies on, and where it was checked:
 ## Review Focus
 
 1. **Credentials never reach logs, child processes or the public Worker.** `R2Config.from_env` removes the key variables from `os.environ` before git, filter-repo or gitleaks start. The config's `repr` and every `StoreError` leave the secret out. The step summary and stdout never contain it. The action passes the secret inputs to the publish step only, through `env:`, never interpolated into a script. The monorepo workflow checks out with `persist-credentials: false`. The Worker gets an R2 binding and nothing else, and the lock object holds no secrets. Tests: Task 6 (`test_from_env_reads_settings_and_removes_the_keys`, `test_errors_and_repr_never_contain_the_secret`), Task 8 (`test_secret_never_reaches_output`, `test_publish_removes_the_keys_from_the_environment`), Task 12 (`test_credentials_reach_only_the_publish_step`, `test_inputs_never_expand_inside_scripts`).
-2. **The secret scan covers the full exported history and runs before any upload; a finding blocks the project.** The spec scans only `published..new` in CI. This plan scans everything reachable from the export tip on every run that uploads anything, because CI cannot otherwise prove the local review scan ever happened. A secret in a commit whose file was later deleted still blocks, and so does one that a merge or a conflict resolution introduces (remerge-diff for two-parent merges, a `-m` pass for octopus merges). gitleaks' git runs without the user's git config, so `partlet review` and CI report the same paths and fingerprints. A blocked first publish leaves no keys at all, and a blocked later publish leaves the published state byte for byte unchanged. Tests: Task 3 (`test_secret_in_a_deleted_file_is_found`, `test_secret_added_by_a_merge_is_found`, `test_secret_in_a_conflict_resolution_is_found`, `test_secret_added_by_an_octopus_merge_is_found_once`, `test_users_git_config_does_not_change_reported_paths`, `test_report_is_redacted`), Task 4 (`test_secret_in_history_blocks_first_publish_before_any_upload`, `test_secret_added_by_a_merge_blocks_the_publish`, `test_secret_in_new_commit_leaves_published_state_alone`).
+2. **The secret scan covers the full exported history and runs before any upload; a finding blocks the project.** The spec scans only `published..new` in CI. This plan scans everything reachable from the export tip on every run that uploads anything, because CI cannot otherwise prove the local review scan ever happened. A secret in a commit whose file was later deleted still blocks, and so does one that a merge or a conflict resolution introduces (first-parent merge diffs for both two-parent and octopus merges, with all reachable history traversed). gitleaks' git runs without the user's git config, so `partlet review` and CI report the same paths and fingerprints. A blocked first publish leaves no keys at all, and a blocked later publish leaves the published state byte for byte unchanged. Tests: Task 3 (`test_secret_in_a_deleted_file_is_found`, `test_secret_added_by_a_merge_is_found`, `test_secret_in_a_conflict_resolution_is_found`, `test_conflict_resolution_uses_canonical_paths_for_config`, `test_deleted_side_branch_secret_is_scanned`, `test_merged_branch_findings_keep_native_fingerprints`, `test_secret_added_by_an_octopus_merge_is_found_once`, `test_users_git_config_does_not_change_reported_paths`, `test_report_is_redacted`), Task 4 (`test_secret_in_history_blocks_first_publish_before_any_upload`, `test_secret_added_by_a_merge_blocks_the_publish`, `test_secret_in_new_commit_leaves_published_state_alone`).
 3. **CI enforces the approval pin and the fast-forward check.** `check_history` (plan 1) still decides. `partlet publish` adds `check_checkout`: HEAD must be the tip of the local publishing branch and `partlet.toml` must match the committed version, so pins that were never committed cannot be published, and a run from a pull request or another branch cannot publish. The action creates `refs/heads/<branch>` from `origin/<branch>` when the checkout lacks it; the export fails with "branch ... not found" without it. Tests: Task 8 (`test_ci_enforces_the_approval_pin_and_fast_forward`, `test_refuses_a_checkout_of_another_branch`, `test_refuses_without_a_local_publishing_branch`, `test_refuses_an_uncommitted_manifest_edit`), Task 12 smoke job.
-4. **Publishes to one source are serialised.** The sweep deletes every unreferenced key under a project's pack, site and archive prefixes, including on the `unchanged` shortcut. A second run could therefore delete packs or a site build that the first has uploaded but not yet pointed at. The first run then writes pointers to missing objects, and later publishes do not repair them: incremental packs exclude everything reachable from the published tip, and an unchanged build is not re-rendered. The workflow's `concurrency` group serialises the runs GitHub knows about. The store lock covers the rest: a local `partlet publish` or `unpublish`, a second workflow or repository using the same source (GitHub concurrency groups are per repository), or a workflow edited without the group. Check that every command that writes holds the lock for its whole run, that the lock is released on failure and on SIGTERM, and that a run never removes a lock it does not hold. A retried conditional put whose first attempt succeeded finds the run's own lock; the token says so, and the run carries on. R2 has no conditional delete, so release reads the lock and then deletes it; a lock taken in between would be deleted too, which needs someone to run `partlet unlock` on a live run at that moment. Tests: Task 5 (`test_lock_is_exclusive_and_released`, `test_someone_elses_lock_is_left_alone`, `test_a_retried_create_that_already_succeeded_still_holds_the_lock`), Task 6 (`test_put_if_absent_creates_once` against both stores), Task 8 (`test_a_held_lock_stops_the_publish`).
+4. **Publishes to one source are serialised.** The sweep deletes every unreferenced key under a project's pack, site and archive prefixes, including on the `unchanged` shortcut. Overlap can leave pointers naming objects another run has deleted; later publishes cannot repair that. The workflow's `concurrency` group covers runs in that repository, and the store lock covers local runs and other workflows or repositories publishing the same source. Every command that writes holds the lock for its whole run and releases it on failure and SIGTERM. A retried conditional put that finds this run's token still counts as acquiring the lock. R2 deletes are single-attempt: after an uncertain response, retrying could remove the next publisher's lock even without `partlet unlock`. The error is reported; a lock still present blocks later runs until the user verifies the holder has stopped and unlocks it. R2 has no conditional delete, so manually unlocking a live run remains unsafe: another lock could be taken between the release's token read and delete. Tests: Task 5 (`test_lock_is_exclusive_and_released`, `test_someone_elses_lock_is_left_alone`, `test_a_retried_create_that_already_succeeded_still_holds_the_lock`), Task 6 (`test_put_if_absent_creates_once` against both stores, `test_lost_lock_delete_response_is_not_retried` before and after the server applies the delete), Task 8 (`test_a_held_lock_stops_the_publish`).
 5. **`unpublish` removes everything under `<source>/p/<name>/`, nothing under `p/<name>x/`, and the project's site index entry.** `current` is deleted first and the index rebuilt before the remaining keys, so an interrupted run has already taken the project off the site, and running again finishes the job. It refuses a project that is still approved in the manifest (the next publish would restore it) and rejects names that could widen the prefix. Tests: Task 9.
 6. **Upload order and atomicity on R2.** R2 has no multi-object transaction. Each PutObject replaces one object whole, and reads, lists and deletes see completed writes immediately, so the order alone guarantees that no pointer names a missing object: new objects first, then `objects/info/packs`, `info/refs`, `HEAD`, then `current`, then the sweep. The Worker reads through its binding, which the R2 cache never touches. Clients and Cloudflare's edge may still cache `info/refs` and `objects/info/packs` for the 60 seconds the spec allows, while the sweep keeps superseded objects for one publish only. Two publishes less than a minute apart can therefore delete a pack that a cached `objects/info/packs` still lists; the client's fetch fails, and a retry once the cached copy expires succeeds. This plan does not change that; see open question 3.
-7. **Retries and idempotency on partial failure.** botocore retries transient errors (standard mode, 5 attempts). It does not retry reading a response body, which streams after the request returns, so `R2Store.get` retries that itself. Every put and delete is idempotent. Task 7 fails a publish at every single put or delete in turn. After each failure every key the live pointers name must exist and a clone must work; a plain re-run must recover, publish the new tip, and let the earlier clone `git pull`. Task 7 also checks that each failed run reports the project as failed. `NoSuchBucket` is an error, never "nothing published" (Task 6).
+7. **Retries and idempotency on partial failure.** botocore retries transient errors for reads and writes in standard mode (`max_attempts=5` configures five retries after the initial request). Deletes use a separate client with `total_max_attempts=1`, because repeating a successful lock delete after losing its response could remove a replacement lock. An uncertain delete raises `StoreError`; callers do not retry lock release. botocore does not retry reading a response body, so `R2Store.get` retries that itself. Task 7 fails a publish at every single put or delete in turn. After each failure every key the live pointers name must exist and a clone must work; a plain re-run must recover, publish the new tip, and let the earlier clone `git pull`. Task 7 also checks that each failed run reports the project as failed. `NoSuchBucket` is an error, never "nothing published" (Task 6).
 
 Also guarded, with tests in the owning tasks: no test can open a non-loopback connection, inherit cloud credentials or write GitHub Actions' summary, output or environment files (Task 1); `build` and `review` also drop the R2 keys from the environment (Tasks 8 and 11); a gitleaks or filter-repo build other than the pinned one is refused (Tasks 3 and 4); the action's third-party actions are pinned to commit SHAs, uv to a version and checksum with no Actions cache, Python packages to hash-locked wheels, and its Python never imports from the monorepo checkout (Task 12).
 
@@ -449,7 +449,7 @@ Queue area `[PUBLISHER]`.
   - `class ScanError(Exception)`
   - `@dataclass(frozen=True) class Finding(rule: str, commit: str, file: str, line: int, fingerprint: str)` with `describe() -> str`
   - `find_gitleaks() -> str`, `check_gitleaks(binary: str | None = None) -> str` (path of a gitleaks that is exactly the pinned version)
-  - `scan_history(repo: Path, config_dir: Path, workdir: Path, binary: str) -> list[Finding]` (everything reachable from `refs/heads/main`, merges included, deduplicated by fingerprint; `config_dir` is the monorepo root, whose `.gitleaks.toml` and `.gitleaksignore` apply; needs git 2.36 or newer)
+  - `scan_history(repo: Path, config_dir: Path, workdir: Path, binary: str) -> list[Finding]` (everything reachable from `refs/heads/main`, merges included, deduplicated by fingerprint; `config_dir` is the monorepo root, whose `.gitleaks.toml` and `.gitleaksignore` apply; needs git 2.31 or newer)
   - `@dataclass(frozen=True) class Scanner(binary: str, config_dir: Path)` with `scan(repo: Path, workdir: Path) -> list[Finding]`
 
 - [ ] **Step 1: Write the failing tests**
@@ -538,7 +538,7 @@ def test_secret_added_by_a_merge_is_found(mono, tmp_path, gitleaks):
     assert [(f.file, f.commit) for f in findings] == [("foo/config.py", merge)]
 
 
-def test_secret_in_a_conflict_resolution_is_found(mono, tmp_path, gitleaks):
+def conflict_resolution(mono):
     mono.write("foo/a.txt", "base\n")
     mono.commit("c1")
     branch(mono, "side")
@@ -550,20 +550,87 @@ def test_secret_in_a_conflict_resolution_is_found(mono, tmp_path, gitleaks):
     with pytest.raises(GitError):
         git("merge", "-q", "side", cwd=mono.path)  # conflicts
     mono.write("foo/a.txt", f'resolved = "{FAKE_TOKEN}"\n')
-    merge = mono.commit("resolve the conflict")
+    return mono.commit("resolve the conflict")
+
+
+def test_secret_in_a_conflict_resolution_is_found(mono, tmp_path, gitleaks):
+    merge = conflict_resolution(mono)
     (finding,) = scan(mono, tmp_path, gitleaks)
-    assert finding.commit == merge
-    # gitleaks 8.30.1 keeps git's "b/" prefix on a file whose remerge-diff
-    # hunk follows a "remerge CONFLICT" header line; the finding still counts.
-    assert finding.file in ("foo/a.txt", "b/foo/a.txt")
+    assert (finding.commit, finding.file) == (merge, "foo/a.txt")
 
 
-def test_secret_from_a_merged_branch_is_reported_once(mono, tmp_path, gitleaks):
+@pytest.mark.parametrize(
+    "config, expected",
+    [
+        (
+            (
+                "[[rules]]\nid = 'path-token'\n"
+                "regex = '''ghp_[0-9A-Za-z]{36}'''\n"
+                "path = '''^foo/a[.]txt$'''\n"
+            ),
+            ["path-token"],
+        ),
+        (
+            "[extend]\nuseDefault = true\n[allowlist]\npaths = ['''^b/''']\n",
+            ["github-pat"],
+        ),
+        (
+            "[extend]\nuseDefault = true\n[allowlist]\npaths = ['''^foo/''']\n",
+            [],
+        ),
+    ],
+    ids=["path-rule", "unrelated-path-allowlist", "matching-path-allowlist"],
+)
+def test_conflict_resolution_uses_canonical_paths_for_config(
+    mono, tmp_path, gitleaks, config, expected
+):
+    merge = conflict_resolution(mono)
+    mono.write(".gitleaks.toml", config)
+    findings = scan(mono, tmp_path, gitleaks)
+    assert [f.rule for f in findings] == expected
+    assert all((f.commit, f.file) == (merge, "foo/a.txt") for f in findings)
+
+
+def test_merged_branch_findings_keep_native_fingerprints(mono, tmp_path, gitleaks):
     mono.write("foo/a.txt", "a\n")
     mono.commit("c1")
     branch(mono, "side")
     mono.write("foo/config.py", f'TOKEN = "{FAKE_TOKEN}"\n')
     leaky = mono.commit("side adds a token")
+    checkout(mono, "main")
+    mono.write("foo/c.txt", "c\n")
+    mono.commit("main")
+    git("merge", "-q", "--no-ff", "side", "-m", "merge side", cwd=mono.path)
+    merge = git("rev-parse", "HEAD", cwd=mono.path).stdout.decode().strip()
+    checkout(mono, "side")
+    mono.write("foo/d.txt", "d\n")
+    mono.commit("side continues")
+    checkout(mono, "main")
+    git("merge", "-q", "--no-ff", "side", "-m", "merge again", cwd=mono.path)
+    findings = scan(mono, tmp_path, gitleaks)
+    assert {(f.file, f.commit) for f in findings} == {
+        ("foo/config.py", leaky),
+        ("foo/config.py", merge),
+    }
+    # The origin and importing merge are distinct accepted occurrences.
+    origin = next(f for f in findings if f.commit == leaky)
+    ignore = mono.path / ".gitleaksignore"
+    ignore.write_text(origin.fingerprint + "\n")
+    assert [f.commit for f in scan(mono, tmp_path / "origin-ignored", gitleaks)] == [
+        merge
+    ]
+    ignore.write_text("\n".join(f.fingerprint for f in findings) + "\n")
+    assert scan(mono, tmp_path / "all-ignored", gitleaks) == []
+
+
+def test_deleted_side_branch_secret_is_scanned(mono, tmp_path, gitleaks):
+    mono.write("foo/a.txt", "a\n")
+    mono.commit("c1")
+    branch(mono, "side")
+    mono.write("foo/config.py", f'TOKEN = "{FAKE_TOKEN}"\n')
+    leaky = mono.commit("side adds a token")
+    mono.rm("foo/config.py")
+    mono.commit("side removes the token")
     checkout(mono, "main")
     mono.write("foo/c.txt", "c\n")
     mono.commit("main")
@@ -676,7 +743,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from partlet.gitutil import clean_env, git_out
+from partlet.gitutil import clean_env
 
 # Must match VERSION in scripts/install-gitleaks.sh (tests/test_scan.py checks).
 GITLEAKS_VERSION = "8.30.1"
@@ -744,14 +811,11 @@ def check_gitleaks(binary: str | None = None) -> str:
     return binary
 
 
-# Plain `git log -p` prints no diff for merge commits, so a secret that a
-# merge itself introduces (an "evil merge", or a conflict resolution) would go
-# unscanned. remerge-diff shows exactly what a two-parent merge adds beyond
-# git's own automatic merge, so content from the merged branch is reported
-# once, at the commit that added it. remerge-diff skips merges with more than
-# two parents; a second pass diffs those against each parent.
-MERGE_LOG_OPTS = "--diff-merges=remerge refs/heads/main"
-OCTOPUS_LOG_OPTS = "-m --min-parents=3 refs/heads/main"
+# Diff each merge against its first parent, including octopus merges. This
+# controls only the displayed diff: do not add traversal's `--first-parent`,
+# because secrets deleted on a side branch before merging must still be scanned.
+# Ordinary patches preserve canonical paths for path rules and allowlists.
+HISTORY_LOG_OPTS = "--diff-merges=first-parent refs/heads/main"
 
 
 def _gitleaks(
@@ -759,7 +823,6 @@ def _gitleaks(
     config_dir: Path,
     workdir: Path,
     binary: str,
-    log_opts: str,
     report: Path,
 ) -> list[dict]:
     cmd = [
@@ -779,7 +842,7 @@ def _gitleaks(
         "--gitleaks-ignore-path",
         str(config_dir),
         "--log-opts",
-        log_opts,
+        HISTORY_LOG_OPTS,
     ]
     config = config_dir / ".gitleaks.toml"
     if config.is_file():
@@ -807,24 +870,10 @@ def scan_history(
     `config_dir` is the monorepo root. Its `.gitleaks.toml`, if present, is the
     gitleaks configuration, and its `.gitleaksignore`, if present, lists accepted
     findings by fingerprint. Secrets are redacted in the report, so a Finding
-    never carries one. Needs git 2.36 or newer (remerge-diff).
+    never carries one. Needs git 2.31 or newer (first-parent merge diffs).
     """
     workdir.mkdir(parents=True, exist_ok=True)
-    items = _gitleaks(
-        repo, config_dir, workdir, binary, MERGE_LOG_OPTS, workdir / "gitleaks.json"
-    )
-    octopus = git_out(
-        "rev-list", "--min-parents=3", "--count", "refs/heads/main", cwd=repo
-    )
-    if octopus != "0":
-        items += _gitleaks(
-            repo,
-            config_dir,
-            workdir,
-            binary,
-            OCTOPUS_LOG_OPTS,
-            workdir / "gitleaks-octopus.json",
-        )
+    items = _gitleaks(repo, config_dir, workdir, binary, workdir / "gitleaks.json")
     findings: dict[str, Finding] = {}
     try:
         for item in items:
@@ -835,7 +884,7 @@ def scan_history(
                 line=int(item["StartLine"]),
                 fingerprint=item["Fingerprint"],
             )
-            # -m reports an octopus merge's lines once per parent.
+            # Preserve gitleaks' native fingerprints for .gitleaksignore.
             findings.setdefault(finding.fingerprint, finding)
     except (KeyError, TypeError, ValueError) as e:
         raise ScanError(f"cannot read the gitleaks report: {e}") from e
@@ -855,7 +904,7 @@ class Scanner:
 
 Why `--exit-code 0`: gitleaks exits 1 both when it finds leaks and when it fails, so the exit status alone cannot tell a finding from a broken scan. With `--exit-code 0` any non-zero exit is an error, and findings come from the JSON report. `--redact` replaces `Secret` and `Match` with `REDACTED` in the report, so no `Finding` holds a secret. `--gitleaks-ignore-path` must always be given: its default is the current directory.
 
-Merge commits: `git log -p`, which gitleaks runs, prints no diff for a merge, so a secret that a merge itself adds (an "evil merge", or a conflict resolution) would never be scanned. `--diff-merges=remerge` diffs each two-parent merge against git's own re-run of that merge, so it shows only what the merge adds, and a secret that arrived from the merged branch is reported once, at the commit that added it. Plain `-m` would also report that secret again at every merge, under a new fingerprint each time, so every accepted finding would need several `.gitleaksignore` lines. Remerge-diff skips merges with more than two parents. When the export has any, a second pass with `-m --min-parents=3` covers them, and duplicate fingerprints from its per-parent diffs are dropped. One quirk, seen with gitleaks 8.30.1: in a conflicted merge's remerge-diff, gitleaks names the file with git's `b/` prefix (`b/foo/a.txt`). The finding still blocks and its fingerprint is stable, so the plan accepts it rather than rewriting paths that would then disagree with the fingerprint.
+Merge commits: `git log -p`, which gitleaks runs, prints no diff for a merge by default. `--diff-merges=first-parent` shows each merge against its first parent, including octopus merges, using ordinary patches with canonical paths. It changes the diff only: do not add traversal's `--first-parent`, which would hide secrets committed and deleted on a side branch before merging. Remerge output is unsuitable here because gitleaks 8.30.1 retains a `b/` prefix after conflict headers, suppressing anchored path rules or incorrectly matching path allowlists. Normalizing returned findings cannot recover a rule that never matched. Native fingerprints remain unchanged: a side-branch secret can be reported at its origin and at a merge that imports it, and every reported fingerprint needs its own `.gitleaksignore` entry when accepted. Unlike `-m`, first-parent diffs do not report unchanged mainline secrets again merely because they differ from each later merge's side parent.
 
 gitleaks' git runs with `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1`. Without that, a user setting such as `diff.noprefix` changes the paths, and so the fingerprints, that `partlet review` reports on a laptop compared with CI, and `.gitleaksignore` entries copied from the review would not match.
 
@@ -885,7 +934,7 @@ Queue area `[PUBLISHER]`.
 **Interfaces:**
 - Consumes: `scan` (Task 3), `publish_project` and `publish_all` as left by `publish-orphan-sweep`.
 - Produces:
-  - `tools.FILTER_REPO_VERSION = "2.47.0"`, `class ToolError(Exception)`, `@dataclass(frozen=True) class Tools(versions: dict[str, str], gitleaks: str | None)`, `check_tools(*, gitleaks: bool) -> Tools` (also refuses git older than 2.36, `MIN_GIT`)
+  - `tools.FILTER_REPO_VERSION = "2.47.0"`, `class ToolError(Exception)`, `@dataclass(frozen=True) class Tools(versions: dict[str, str], gitleaks: str | None)`, `check_tools(*, gitleaks: bool) -> Tools` (also refuses git older than 2.31, `MIN_GIT`)
   - `publish_project(..., workdir, scanner: Scanner | None = None)` and `publish_all(..., workdir, scanner: Scanner | None = None)`: with a scanner, a project whose export history has any finding fails before its first store write
   - `helpers.export_tip(mono, tmp_path, name="foo", path=None) -> str`
 
@@ -948,8 +997,8 @@ def test_other_filter_repo_release_is_refused(monkeypatch):
 
 
 def test_old_git_is_refused(monkeypatch):
-    monkeypatch.setattr(tools, "git_out", lambda *a, **k: "git version 2.35.8")
-    with pytest.raises(ToolError, match="2.36 or newer"):
+    monkeypatch.setattr(tools, "git_out", lambda *a, **k: "git version 2.30.8")
+    with pytest.raises(ToolError, match="2.31 or newer"):
         check_tools(gitleaks=False)
 ```
 
@@ -1083,8 +1132,8 @@ from partlet.scan import GITLEAKS_VERSION, ScanError, check_gitleaks
 # Export commit hashes depend on filter-repo's behaviour (docs/DECISIONS.md),
 # so publishing refuses any other release. Must match pyproject.toml.
 FILTER_REPO_VERSION = "2.47.0"
-# remerge-diff, which the secret scan uses for merge commits, came in git 2.36.
-MIN_GIT = (2, 36)
+# rev-parse --path-format and first-parent merge diffs need git 2.31.
+MIN_GIT = (2, 31)
 
 
 class ToolError(Exception):
@@ -1114,7 +1163,7 @@ def check_tools(*, gitleaks: bool) -> Tools:
     found = re.match(r"(\d+)\.(\d+)", git_version)
     if found is None or tuple(map(int, found.groups())) < MIN_GIT:
         raise ToolError(
-            f"git {git_version} is too old; partlet needs git 2.36 or newer"
+            f"git {git_version} is too old; partlet needs git 2.31 or newer"
         )
     versions = {
         "partlet": __version__,
@@ -1212,7 +1261,7 @@ Queue area `[PUBLISHER]`.
 
 It fails closed. A run that finds the lock exits non-zero, naming the holder and when it took the lock. Nothing expires or breaks a lock automatically, because expiring the lock of a slow but live publish would reopen the race this lock exists to close. A run killed without warning (SIGKILL, a lost runner) leaves its lock behind, and the user clears it with `partlet unlock` (Task 9) after checking that the run is gone. Python's `finally` releases the lock on errors, Ctrl-C (`KeyboardInterrupt`) and, through the handler Task 8 installs, SIGTERM.
 
-Two edge cases. A client retry of the conditional put, after a first attempt that succeeded but whose response was lost, gets 412; the lock then holds this run's token, which `store_lock` treats as success. Release reads the lock and deletes it only if the token is still this run's. R2 supports no conditional headers on DeleteObject (R2 docs, "S3 API compatibility", checked 2026-10-24), so a lock taken between that read and the delete would be deleted too. That needs someone to run `partlet unlock` on a live run and another run to start in that instant; the comment in `lock.py` records it.
+Two edge cases. A client retry of the conditional put, after a first attempt that succeeded but whose response was lost, gets 412; the lock then holds this run's token, which `store_lock` treats as success. Release reads the lock and deletes it only if the token is still this run's. R2 supports no conditional headers on DeleteObject (R2 docs, "S3 API compatibility", checked 2026-10-24). Every R2 delete therefore uses a dedicated single-attempt client (`total_max_attempts=1`, including the initial request). If its response is lost, `StoreError` reports the uncertain outcome without retrying: a successful delete may already have allowed the next publisher to acquire the key. If the delete did not land, the lock remains and later runs fail closed. A user must establish that the holder has stopped before using `partlet unlock`; removing a live run's lock can still let another run acquire it between the release's token read and delete.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1436,9 +1485,10 @@ def store_lock(store: Store, source: str, holder: str) -> Iterator[None]:
         yield
     finally:
         # Release only our own lock: `partlet unlock` may have removed it and
-        # another run taken it since. R2 has no conditional delete, so a lock
-        # taken between this read and the delete would be removed too; that
-        # needs someone to run `partlet unlock` on a live run in that instant.
+        # another run taken it since. R2Store.delete makes one attempt only;
+        # an uncertain response raises rather than retrying against a new lock.
+        # R2 has no conditional delete: manually unlocking a live run can
+        # still let another run acquire the key between this read and delete.
         if (read_lock(store, source) or {}).get("token") == token:
             store.delete(lock_key(source))
 ```
@@ -1471,7 +1521,7 @@ Queue area `[PUBLISHER]`. Depends on `publish-orphan-sweep` having landed (its s
   - `class StoreError(Exception)`, `class R2ClientError(StoreError)` with `code: str`, `status: int | None`
   - `@dataclass(frozen=True) class R2Config(bucket: str, endpoint_url: str, access_key_id: str, secret_access_key: str)` (keys excluded from `repr`), `R2Config.from_env(environ: MutableMapping[str, str]) -> R2Config` (removes the two key variables from `environ`)
   - `check_endpoint(url: str) -> str`: `https://<host>`, or plain `http` on loopback only
-  - `class R2Store(config: R2Config, *, page_size: int = 1000, max_attempts: int = 5, retry_delay: float = 0.5)` implementing every `Store` method; `list` and `list_dirs` follow continuation tokens to the end; `get` retries a response body that fails while streaming
+  - `class R2Store(config: R2Config, *, page_size: int = 1000, max_attempts: int = 5, retry_delay: float = 0.5)` implementing every `Store` method; `list` and `list_dirs` follow continuation tokens to the end; `get` retries a response body that fails while streaming; `delete` uses a dedicated single-attempt client and raises on an uncertain outcome
   - test fixtures `moto_endpoint` (session), `r2_config` (fresh bucket), `r2_env` (sets `PARTLET_R2_*` for it); `helpers.FAKE_R2_KEY_ID`, `helpers.FAKE_R2_SECRET`, `helpers.mirror_store(store, root)`
 
 - [ ] **Step 1: Add the dependencies**
@@ -1775,6 +1825,52 @@ approved = "{approved}"
     with serve(tmp_path / "site") as base:
         git("clone", "-q", f"{base}/s/p/foo/git", str(tmp_path / "clone"), cwd=tmp_path)
     assert (tmp_path / "clone" / "README.md").read_text() == "# Foo\n"
+
+
+@pytest.mark.parametrize("applied", [False, True])
+def test_lost_lock_delete_response_is_not_retried(r2_config, monkeypatch, applied):
+    from botocore.exceptions import ConnectionClosedError
+
+    from partlet.lock import LockError, read_lock, store_lock
+
+    first = R2Store(r2_config, max_attempts=1)
+    second = R2Store(r2_config)
+    next_holder = store_lock(second, "s", "second run")
+    client = getattr(first, "_delete_client", first._client)
+    transport = client._endpoint.http_session
+    send = transport.send
+    attempts = 0
+    next_held = False
+
+    def lose_response(request):
+        nonlocal attempts, next_held
+        if request.method != "DELETE":
+            return send(request)
+        attempts += 1
+        if attempts == 1:
+            if applied:
+                # The real local S3 server applies the delete. Another
+                # publisher acquires the now-free lock before the connection
+                # loss reaches the first client's retry handler.
+                response = send(request)
+                response.raw.close()
+                next_holder.__enter__()
+                next_held = True
+            raise ConnectionClosedError(endpoint_url=r2_config.endpoint_url)
+        return send(request)
+
+    monkeypatch.setattr(transport, "send", lose_response)
+    try:
+        with pytest.raises(StoreError), store_lock(first, "s", "first run"):
+            assert read_lock(first, "s")["holder"] == "first run"
+        assert attempts == 1
+        expected = "second run" if applied else "first run"
+        assert read_lock(second, "s")["holder"] == expected
+        with pytest.raises(LockError):
+            store_lock(R2Store(r2_config), "s", "third run").__enter__()
+    finally:
+        if next_held:
+            next_holder.__exit__(None, None, None)
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
@@ -2001,32 +2097,43 @@ class R2Store:
         self._page_size = page_size
         self._max_attempts = max_attempts
         self._retry_delay = retry_delay
-        self._client = boto3.session.Session().client(
+        session = boto3.session.Session()
+        client_options = {
+            "endpoint_url": self.endpoint_url,
+            "aws_access_key_id": config.access_key_id,
+            "aws_secret_access_key": config.secret_access_key,
+        }
+        client_config = Config(
+            region_name="auto",
+            signature_version="s3v4",
+            retries={"max_attempts": max_attempts, "mode": "standard"},
+            connect_timeout=10,
+            read_timeout=60,
+            # Send and check checksums only where the API requires them,
+            # whatever this botocore version's default is.
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        )
+        self._client = session.client("s3", config=client_config, **client_options)
+        # A delete may succeed even when its response is lost. Retrying it
+        # could delete a replacement lock acquired by the next publisher.
+        # total_max_attempts includes the initial request: one means no retry.
+        self._delete_client = session.client(
             "s3",
-            endpoint_url=self.endpoint_url,
-            aws_access_key_id=config.access_key_id,
-            aws_secret_access_key=config.secret_access_key,
-            config=Config(
-                region_name="auto",
-                signature_version="s3v4",
-                retries={"max_attempts": max_attempts, "mode": "standard"},
-                connect_timeout=10,
-                read_timeout=60,
-                # Send and check checksums only where the API requires them,
-                # whatever this botocore version's default is.
-                request_checksum_calculation="when_required",
-                response_checksum_validation="when_required",
+            config=client_config.merge(
+                Config(retries={"total_max_attempts": 1, "mode": "standard"})
             ),
+            **client_options,
         )
 
     def __repr__(self) -> str:
         return f"R2Store(bucket={self.bucket!r}, endpoint_url={self.endpoint_url!r})"
 
-    def _call(self, what: str, method: str, **kwargs):
+    def _call(self, what: str, method: str, *, client=None, **kwargs):
         from botocore.exceptions import BotoCoreError, ClientError
 
         try:
-            return getattr(self._client, method)(Bucket=self.bucket, **kwargs)
+            return getattr(client or self._client, method)(Bucket=self.bucket, **kwargs)
         except ClientError as e:
             error = e.response.get("Error", {})
             status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
@@ -2091,7 +2198,11 @@ class R2Store:
 
     def delete(self, key: str) -> None:
         check_key(key)
-        self._call(f"delete {key}", "delete_object", Key=key)
+        # An uncertain delete fails the operation; callers must not retry a
+        # lock release, because another run may already hold the same key.
+        self._call(
+            f"delete {key}", "delete_object", client=self._delete_client, Key=key
+        )
 
     def _pages(self, **kwargs) -> Iterator[dict]:
         token = None
@@ -2139,7 +2250,7 @@ Notes for the reviewer:
 
 - Paging: `list_objects_v2` returns at most `MaxKeys` (R2: 1000) keys per call; `_pages` follows `NextContinuationToken` until `IsTruncated` is false. The sweep and `unpublish` depend on seeing every key.
 - `get` returns `None` only for `NoSuchKey`. `NoSuchBucket` is also an HTTP 404, and reading it as "nothing published" would turn a misconfigured bucket into a first publication.
-- Retries: botocore's standard mode retries throttling, 5xx and connection errors up to `max_attempts` with backoff. It does not retry reading a body: `StreamingBody.read` runs after the request has returned and raises `ResponseStreamingError`, `ReadTimeoutError` or `IncompleteReadError` (all `BotoCoreError`, checked in botocore 1.43.118). So `get` repeats the whole request when the body fails, up to `max_attempts`, with doubling delays from `retry_delay`. Every operation here is safe to repeat.
+- Retries: botocore's standard mode retries throttling, 5xx and connection errors with backoff; the `Config` setting `max_attempts` counts retries after the initial request. Reads and puts use that policy. Deletes use a separate client with `total_max_attempts=1` so a lost successful response cannot cause a second delete to remove a replacement lock. An uncertain delete raises `StoreError`; callers do not repeat lock release. botocore does not retry reading a body: `StreamingBody.read` runs after the request has returned and raises `ResponseStreamingError`, `ReadTimeoutError` or `IncompleteReadError` (all `BotoCoreError`, checked in botocore 1.43.118). So `get` repeats the whole request when the body fails, up to `max_attempts` reads, with doubling delays from `retry_delay`.
 - The two `*_checksum_*` settings make botocore add checksums only where an operation requires them, so behaviour does not change with botocore's defaults. The current Cloudflare boto3 example does not mention them; they are a defensive choice, recorded in docs/DECISIONS.md (Task 14).
 - `boto3` is imported inside `R2Store.__init__`, so `partlet build` and the tests that do not touch R2 do not pay for importing it.
 
@@ -4539,7 +4650,7 @@ Queue area `[DOCS]`. Each group below goes in the PR named, because that PR make
 
 `docs/QUALITY.md`:
 - Test policy: after the sandbox sentence, add that the sandbox also removes `AWS_*`, `R2_*`, `PARTLET_R2_*`, `CLOUDFLARE_*`, `CF_*`, `WRANGLER_*` and `GITLEAKS_*` variables, points the AWS SDK at missing config files, and lets sockets connect to loopback addresses only (DNS lookups and UDP are not blocked), so no test can reach a real bucket over TCP; it also unsets `GITHUB_STEP_SUMMARY`, `GITHUB_OUTPUT`, `GITHUB_ENV` and `GITHUB_PATH`.
-- Toolchain pins: change the git floor to "git 2.36 or newer (remerge-diff, for the secret scan of merge commits)", and add "git-filter-repo 2.47.0 exactly (`pyproject.toml`; export hashes depend on it); gitleaks 8.30.1 exactly, installed by `scripts/install-gitleaks.sh` with a SHA-256 per platform (`scripts/setup.sh` runs it, so CI's `check` job downloads it)".
+- Toolchain pins: keep "git 2.31 or newer (`rev-parse --path-format` and first-parent merge diffs)", and add "git-filter-repo 2.47.0 exactly (`pyproject.toml`; export hashes depend on it); gitleaks 8.30.1 exactly, installed by `scripts/install-gitleaks.sh` with a SHA-256 per platform (`scripts/setup.sh` runs it, so CI's `check` job downloads it)".
 
 `docs/DECISIONS.md`, in the 2026-10-17 section:
 
@@ -4548,7 +4659,7 @@ Queue area `[DOCS]`. Each group below goes in the PR named, because that PR make
 | CI scans each export's full history with gitleaks on every run that uploads, not only the commits since the published tip. | The spec scans `published..new` in CI and relies on `partlet review` for the rest, but CI cannot tell whether a review scan happened, or with which configuration. A full scan makes the approval pin unable to publish a secret anywhere in history. Cost: scan time grows with project history, and a rule or allowlist change can block a project that published before; accept the finding in `.gitleaks.toml` or `.gitleaksignore`. |
 | gitleaks is pinned to one release by SHA-256 per platform in `scripts/install-gitleaks.sh`, run with `--exit-code 0 --redact`, and its findings are read from the JSON report. | gitleaks exits 1 both for findings and for errors, so the exit status cannot tell a finding from a broken scan. Redaction keeps secrets out of the report, results and step summary. Cost: a bump changes five lines and needs its own PR. |
 | git-filter-repo is pinned with `==` in `pyproject.toml`, and publishing refuses any other installed version. | Export commit hashes depend on filter-repo's behaviour (see the 2026-10-15 entry on empty move commits). |
-| gitleaks scans merge commits with `--diff-merges=remerge`, plus a `-m` pass when the export has octopus merges, and its git runs without the user's global or system config. | `git log -p` shows no diff for merges, so a secret added by a merge or a conflict resolution went unscanned. Remerge-diff shows only what a merge adds beyond the automatic merge, so a secret from a merged branch is reported once; plain `-m` reports it again at every merge under new fingerprints. Without config isolation, settings such as `diff.noprefix` change reported paths and fingerprints between a laptop and CI. Cost: git 2.36 or newer, and gitleaks 8.30.1 names a file in a conflicted merge's remerge-diff with a `b/` prefix. |
+| gitleaks scans merge commits with `--diff-merges=first-parent` while traversing every reachable commit, and its git runs without the user's global or system config. | Ordinary patches preserve canonical paths for custom rules and allowlists, including conflict resolutions and octopus merges. Remerge output can suppress path-based detection through a spurious `b/` prefix. Traversal's `--first-parent` is forbidden because it would hide secrets deleted on side branches before merging. Cost: a secret can have separate native fingerprints at its origin and importing merges; accepted findings need every reported fingerprint. Git stays at the existing 2.31 floor. |
 
 `docs/specs/2026-10-15-partlet-design.md`, "Secret scanning": replace the first bullet with "In CI, gitleaks scans the full history of each export before anything is uploaded; a finding fails that project and nothing of it is written." In "Repositories and components", give `scan.py` its real description ("gitleaks wrapper: full-history scan, pinned version check") and add `tools.py`.
 
@@ -4558,7 +4669,7 @@ Queue area `[DOCS]`. Each group below goes in the PR named, because that PR make
 
 | Decision | Reason and trade-off |
 | --- | --- |
-| Publishes to one source are serialised twice: the monorepo workflow's `concurrency` group, and a `<source>/lock` object created with a conditional put (`If-None-Match: *`) that every `build`, `publish` and `unpublish` holds for its whole run. A held lock fails the run, and only `partlet unlock` removes a stale one. | The sweep deletes every key no pointer names, so an overlapping run can delete objects another has uploaded but not yet pointed at, and later publishes do not repair that. The concurrency group covers the workflow's own runs only; the lock also covers local runs and other repositories or workflows publishing the same source. No automatic expiry: expiring the lock of a slow but live run would reopen the race. Cost: a run killed without warning blocks publishing until the user runs `partlet unlock`. A retried put that finds the run's own token counts as taking the lock. R2 has no conditional delete, so release reads the token and then deletes; a lock taken between the two would be removed with it. |
+| Publishes to one source are serialised twice: the monorepo workflow's `concurrency` group, and a `<source>/lock` object created with a conditional put (`If-None-Match: *`) that every `build`, `publish` and `unpublish` holds for its whole run. A held lock fails the run, and only `partlet unlock` removes a stale one. | The sweep deletes every key no pointer names, so an overlapping run can delete objects another has uploaded but not yet pointed at, and later publishes do not repair that. The concurrency group covers the workflow's own runs only; the lock also covers local runs and other repositories or workflows publishing the same source. No automatic expiry: expiring the lock of a slow but live run would reopen the race. Cost: a run killed without warning blocks publishing until the user runs `partlet unlock`. A retried put that finds the run's own token counts as taking the lock. R2 has no conditional delete. Deletes make one attempt only, so a lost successful response cannot trigger a retry that removes a replacement lock. An uncertain outcome raises an error; a remaining lock blocks later runs until the stopped holder is verified and unlocked. Manually unlocking a live run can still race the token read and delete. |
 | The R2 store uses boto3 against R2's S3-compatible API, with checksums only where an operation requires them, and treats only `NoSuchKey` as a missing key. | boto3 is the client the R2 documentation shows for Python. Pinning the checksum mode keeps behaviour independent of botocore's changing defaults. `NoSuchBucket` is also a 404, and reading it as "nothing published" would make a misconfigured bucket look like a first publication. |
 | R2 credentials are read from `PARTLET_R2_*` once and removed from the process environment before any child process starts; the store refuses endpoints that are not `https`, except loopback for tests. | git, filter-repo and gitleaks never inherit the keys, and the keys cannot be sent in clear text or to a URL with embedded credentials. |
 | `partlet publish` refuses to run unless HEAD is the tip of the local publishing branch and `partlet.toml` matches the committed version. | The export reads the branch while the approval pins come from the working tree; requiring them to agree stops pins that were never committed from being published, and stops publishes from pull request or feature-branch checkouts. |
