@@ -15,7 +15,6 @@ This project is run with docket. Read [docket/CONTRACT.md](docket/CONTRACT.md) b
 - Environment: Python 3.12; each worktree has its own `.venv`. Agents never provision, deploy to or change billable services (Cloudflare R2, Workers); they write the code and the instructions and the user runs them.
 - Commit identity: this repository commits as `jonathan.hitchcock@gmail.com` (`git config user.email` in the clone).
 - Attribution: no AI attribution in commits, PR bodies or review threads (no `Co-Authored-By` trailers, no "Generated with" footers). The README credits Claude once; that is the only place.
-- Drafts first: until the user lifts this rule, show the user a draft of any new or changed repository file before committing it.
 
 <!-- docket:end -->
 
