@@ -195,8 +195,8 @@ the publisher rather than by a server-side Git process.
 - `objects/info/packs`: lists the current packs.
 - Consolidation: when a project has more than 20 packs, the publisher writes
   one pack containing everything, updates `objects/info/packs` to list only
-  that pack, and deletes the superseded packs on the following publish, so
-  clients in the middle of a fetch are not broken.
+  that pack once `info/refs` has moved, and deletes the superseded packs on
+  the following publish, so clients in the middle of a fetch are not broken.
 - After a permitted rewrite, the publisher writes a single full pack and
   treats all earlier packs as superseded.
 
@@ -232,21 +232,28 @@ stable URL.
 1. New packs, the new site build, and archives (all new keys, nothing
    references them yet).
 2. Pointers: `objects/info/packs`, `info/refs`, `HEAD`, then the project's
-   `current` file naming the live site build and tip.
-3. Site index (`index.html`, `index.json`).
-4. Cleanup from the previous publish: the site build before the current one,
-   superseded packs, old archives.
+   `current` file naming the live site build and tip. A publish that drops
+   packs (consolidation, rewrite) first lists the old and new packs
+   together, and writes the shorter list only after `info/refs` has moved.
+3. Cleanup, per project: delete every pack, site build and archive that
+   neither the pointers nor the previous publish name. `current` records the
+   previous publish's build, tip and packs, so superseded keys get one
+   publish of grace. A run that finds the project unchanged cleans up too.
+4. Site index (`index.html`, `index.json`), once every project is done.
 
-R2 has no multi-object transaction. This order means refs never point at
-objects that are missing. An interrupted publish leaves unreferenced objects at
-worst, and the next publish cleans them up.
+R2 has no multi-object transaction. This order means refs never name an
+object that is missing or in a pack the pack list leaves out. An interrupted
+publish leaves at worst unreferenced keys, which the next run deletes, or a
+pack list naming a pack the refs no longer need, which stays listed until the
+next consolidation or rewrite drops it.
 
 ## R2 layout
 
 ```
 <source>/index.html
 <source>/index.json
-<source>/p/<name>/current                    JSON: live build id, tip sha, updated time
+<source>/p/<name>/current                    JSON: live build id, tip sha, updated time,
+                                             previous build, tip and packs
 <source>/p/<name>/git/HEAD
 <source>/p/<name>/git/info/refs
 <source>/p/<name>/git/objects/info/packs
@@ -365,7 +372,9 @@ listed and served until it is unpublished.
 - Retrying after an interrupted upload is safe: packs are content-addressed,
   builds are keyed by build ID, and pointers move last.
 - The workflow's `concurrency` group serialises publishes, because the history
-  check reads published state and then writes it.
+  check reads published state and then writes it, and because cleanup deletes
+  every key no pointer names, which includes another publish's uploads that
+  are not named yet.
 
 ## Testing
 

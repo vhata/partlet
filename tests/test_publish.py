@@ -2,7 +2,10 @@ import json
 
 import pytest
 
-from partlet.gitutil import git
+from partlet import gitstatic
+from partlet.archive import ARCHIVE_FORMATS
+from partlet.gitstatic import PACK_EXTS, read_state
+from partlet.gitutil import git, git_out
 from partlet.manifest import parse_manifest
 from partlet.publish import build_id, publish_all
 from partlet.store import LocalStore
@@ -100,9 +103,8 @@ def test_new_commits_publish_and_old_build_is_cleaned_up_one_publish_later(
     build2 = json.loads(store.get("s/p/foo/current"))["build"]
     assert build2 != build1
     assert store.list(f"s/p/foo/site/{build1}/")  # still present: one publish of grace
-    assert f"s/p/foo/site/{build1}/index.html" in json.loads(
-        store.get("s/p/foo/cleanup.json")
-    )
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
+    assert store.list(f"s/p/foo/site/{build1}/")  # an unchanged run keeps the grace
 
     mono.write("foo/a.txt", "one\ntwo\nthree\n")
     mono.commit("c3")
@@ -320,57 +322,246 @@ approved = "{tips["bar"]}"
 
 
 class InterruptedStore(LocalStore):
-    """Fails the put of one key, as if the publish died at that point."""
+    """Fails the put of one key, as if the publish died at that point.
 
-    def __init__(self, root, fail_key):
+    With `after`, the key is written first, as if the publish died just after it.
+    """
+
+    def __init__(self, root, fail_key, after=False):
         super().__init__(root)
         self.fail_key = fail_key
+        self.after = after
 
     def put(self, key, data, content_type=None):
-        if key == self.fail_key:
-            raise OSError(f"interrupted before {key}")
-        super().put(key, data, content_type)
+        if key != self.fail_key:
+            return super().put(key, data, content_type)
+        if self.after:
+            super().put(key, data, content_type)
+        raise OSError(f"interrupted at {key}")
 
 
 class RecordingStore(LocalStore):
-    """Records each deleted key with the build `current` named at that moment."""
+    """Records each deleted key."""
 
     def __init__(self, root):
         super().__init__(root)
         self.deleted = []
 
     def delete(self, key):
-        build = json.loads(self.get("s/p/foo/current"))["build"]
-        self.deleted.append((key, build))
+        self.deleted.append(key)
         super().delete(key)
 
 
-def test_stale_cleanup_list_never_deletes_the_live_build(mono, tmp_path, first, serve):
+def test_sweep_keeps_live_and_previous_keys_only(mono, tmp_path, first, serve):
     store, approved = first
     out = tmp_path / "out"
     run(mono, tmp_path, store, approved, description="X")
     build_x = json.loads(store.get("s/p/foo/current"))["build"]
     run(mono, tmp_path, store, approved, description="Y")
+    build_y = build_id(approved, "Y", "https://partlet.example")
 
-    # Back to X: the same build ID again, interrupted after `current` moves
-    # but before `cleanup.json`, which still lists the X build as dead.
-    interrupted = InterruptedStore(out, "s/p/foo/cleanup.json")
+    # Back to X, the build the last publish retired, interrupted after
+    # `current` moves but before the sweep.
+    interrupted = InterruptedStore(out, "s/p/foo/current", after=True)
     result = run(mono, tmp_path, interrupted, approved, description="X")["foo"]
     assert result.status == "failed"
     assert json.loads(store.get("s/p/foo/current"))["build"] == build_x
-    assert f"s/p/foo/site/{build_x}/index.html" in json.loads(
-        store.get("s/p/foo/cleanup.json")
-    )
+    previous = live_keys(store)
 
     mono.write("foo/a.txt", "one\ntwo\n")
     mono.commit("c2")
     recording = RecordingStore(out)
     result = run(mono, tmp_path, recording, approved, description="X")["foo"]
     assert result.status == "published"
-    live = [key for key, build in recording.deleted if f"/site/{build}/" in key]
-    assert live == []
-    build = json.loads(store.get("s/p/foo/current"))["build"]
-    assert store.get(f"s/p/foo/site/{build}/index.html") is not None
-    with serve(out) as base:
-        git("clone", "-q", f"{base}/s/p/foo/git", str(tmp_path / "clone"), cwd=tmp_path)
-    assert (tmp_path / "clone" / "a.txt").read_text() == "one\ntwo\n"
+    # Y was superseded two publishes ago; X and its archives and packs were
+    # live until this publish and keep their grace.
+    assert store.list(f"s/p/foo/site/{build_y}/") == []
+    assert content_keys(store) == live_keys(store) | previous
+    assert not set(recording.deleted) & (live_keys(store) | previous)
+    assert clone_text(serve, tmp_path) == "one\ntwo\n"
+
+
+def content_keys(store):
+    """Every pack, site build and archive key the project has in the store."""
+    return set(
+        store.list("s/p/foo/git/objects/pack/")
+        + store.list("s/p/foo/site/")
+        + store.list("s/p/foo/archive/")
+    )
+
+
+def live_keys(store):
+    """The pack, site build and archive keys the live pointers name."""
+    current = json.loads(store.get("s/p/foo/current"))
+    packs = read_state(store, "s/p/foo/git").packs
+    return set(
+        [f"s/p/foo/git/objects/pack/{p}.{ext}" for p in packs for ext in PACK_EXTS]
+        + store.list(f"s/p/foo/site/{current['build']}/")
+        + [f"s/p/foo/archive/{current['tip']}.{fmt}" for fmt in ARCHIVE_FORMATS]
+    )
+
+
+def test_publish_interrupted_before_pointers_leaves_nothing_behind(
+    mono, tmp_path, first
+):
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    gen1 = live_keys(store)
+
+    mono.write("foo/a.txt", "one\ntwo\n")
+    mono.commit("c2")
+    interrupted = InterruptedStore(tmp_path / "out", "s/p/foo/git/objects/info/packs")
+    assert run(mono, tmp_path, interrupted, approved)["foo"].status == "failed"
+    orphans = content_keys(store) - gen1
+    for kind in ("/git/objects/pack/", "/site/", "/archive/"):
+        assert any(kind in key for key in orphans)
+
+    mono.write("foo/a.txt", "one\ntwo\nthree\n")
+    mono.commit("c3")
+    assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    # The first publish's build and archives stay for one publish of grace;
+    # what the interrupted publish uploaded was never live and is gone.
+    assert content_keys(store) == live_keys(store) | gen1
+    assert not orphans & content_keys(store)
+
+
+def test_unchanged_run_removes_keys_of_an_abandoned_publish(mono, tmp_path, first):
+    store, approved = first
+    run(mono, tmp_path, store, approved, description="X")
+
+    # A description change dies before `current` names its new site build.
+    interrupted = InterruptedStore(tmp_path / "out", "s/p/foo/current")
+    result = run(mono, tmp_path, interrupted, approved, description="Y")["foo"]
+    assert result.status == "failed"
+    build_y = build_id(approved, "Y", "https://partlet.example")
+    assert store.list(f"s/p/foo/site/{build_y}/")
+
+    # The change is abandoned, so the next run takes the unchanged shortcut.
+    result = run(mono, tmp_path, store, approved, description="X")["foo"]
+    assert result.status == "unchanged"
+    assert store.list(f"s/p/foo/site/{build_y}/") == []
+    assert content_keys(store) == live_keys(store)
+
+
+def test_publish_interrupted_after_current_still_retires_superseded_keys(
+    mono, tmp_path, first
+):
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    gen1 = live_keys(store)
+
+    # An allowed rewrite supersedes every key of the first publish, then dies
+    # just after `current` moves.
+    amend(mono, "rewritten", 1767229200)
+    new_tip = export_tip(mono, tmp_path)
+    allow = f'allow_rewrite_of = "{approved}"'
+    interrupted = InterruptedStore(tmp_path / "out", "s/p/foo/current", after=True)
+    assert run(mono, tmp_path, interrupted, new_tip, extra=allow)["foo"].status == (
+        "failed"
+    )
+    assert json.loads(store.get("s/p/foo/current"))["tip"] == new_tip
+    assert not gen1 & live_keys(store)
+
+    # Nothing changed since, so this run takes the unchanged shortcut; the
+    # superseded keys are still in their one publish of grace.
+    result = run(mono, tmp_path, store, new_tip, extra=allow)["foo"]
+    assert result.status == "unchanged"
+    assert gen1 <= content_keys(store)
+    gen2 = live_keys(store)
+
+    mono.write("foo/a.txt", "one\ntwo\n")
+    mono.commit("c2")
+    assert run(mono, tmp_path, store, new_tip, extra=allow)["foo"].status == (
+        "published"
+    )
+    assert content_keys(store) == live_keys(store) | gen2
+    assert not gen1 & content_keys(store)
+
+
+def test_consolidated_packs_are_deleted_one_publish_later(
+    mono, tmp_path, first, monkeypatch
+):
+    monkeypatch.setattr(gitstatic, "MAX_PACKS", 2)
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    mono.write("foo/a.txt", "2\n")
+    mono.commit("c2")
+    run(mono, tmp_path, store, approved)
+    old_packs = read_state(store, "s/p/foo/git").packs
+    assert len(old_packs) == 2
+
+    mono.write("foo/a.txt", "3\n")
+    mono.commit("c3")
+    run(mono, tmp_path, store, approved)
+    (full,) = read_state(store, "s/p/foo/git").packs
+    pack_keys = set(store.list("s/p/foo/git/objects/pack/"))
+    for pack in (*old_packs, full):
+        assert f"s/p/foo/git/objects/pack/{pack}.pack" in pack_keys
+
+    mono.write("foo/a.txt", "4\n")
+    mono.commit("c4")
+    run(mono, tmp_path, store, approved)
+    pack_keys = set(store.list("s/p/foo/git/objects/pack/"))
+    for pack in old_packs:
+        assert f"s/p/foo/git/objects/pack/{pack}.pack" not in pack_keys
+    assert f"s/p/foo/git/objects/pack/{full}.pack" in pack_keys
+
+
+def interrupted_rewrite(mono, tmp_path, approved, fail_key, after=False):
+    """Run an allowed rewrite of the first publish that dies at `fail_key`."""
+    amend(mono, "rewritten", 1767229200)
+    new_tip = export_tip(mono, tmp_path)
+    allow = f'allow_rewrite_of = "{approved}"'
+    interrupted = InterruptedStore(tmp_path / "out", fail_key, after=after)
+    result = run(mono, tmp_path, interrupted, new_tip, extra=allow)["foo"]
+    assert result.status == "failed"
+    return new_tip, allow
+
+
+def clone_text(serve, tmp_path):
+    clone = tmp_path / f"clone-{len(list(tmp_path.glob('clone-*')))}"
+    with serve(tmp_path / "out") as base:
+        git("clone", "-q", f"{base}/s/p/foo/git", str(clone), cwd=tmp_path)
+    return (clone / "a.txt").read_text()
+
+
+def test_abandoned_rewrite_interrupted_before_refs_stays_clonable(
+    mono, tmp_path, first, serve
+):
+    store, approved = first
+    original = git_out("rev-parse", "HEAD", cwd=mono.path)
+    run(mono, tmp_path, store, approved)
+
+    # The rewrite dies before `info/refs` moves, so refs still need the first
+    # publish's pack, which a rewrite drops from the pack list.
+    interrupted_rewrite(mono, tmp_path, approved, "s/p/foo/git/info/refs")
+    assert clone_text(serve, tmp_path) == "one\n"
+
+    # Abandoned: the export is the published tip again, so this run takes the
+    # unchanged shortcut and sweeps.
+    git("reset", "-q", "--hard", original, cwd=mono.path)
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
+    assert clone_text(serve, tmp_path) == "one\n"
+
+
+def test_rewrite_interrupted_before_the_final_pack_list_stays_clonable(
+    mono, tmp_path, first, serve
+):
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    new_tip, allow = interrupted_rewrite(
+        mono, tmp_path, approved, "s/p/foo/git/HEAD", after=True
+    )
+    assert clone_text(serve, tmp_path) == "one\n"
+    assert run(mono, tmp_path, store, new_tip, extra=allow)["foo"].status == (
+        "published"
+    )
+    assert clone_text(serve, tmp_path) == "one\n"
+
+
+def test_sweep_deletes_a_cleanup_list_from_before_the_sweep(mono, tmp_path, first):
+    store, approved = first
+    run(mono, tmp_path, store, approved)
+    store.put("s/p/foo/cleanup.json", b"[]\n")
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
+    assert store.get("s/p/foo/cleanup.json") is None
