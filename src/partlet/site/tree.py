@@ -12,6 +12,10 @@ SIZE_CAP = 1024 * 1024
 SYMLINK_MODE = b"120000"
 
 
+class TreeError(Exception):
+    """An export tree cannot be represented by the site."""
+
+
 @dataclass(frozen=True)
 class FileEntry:
     path: str
@@ -41,7 +45,13 @@ def read_tree(repo: Path, tip: str) -> list[FileEntry]:
         mode, kind, sha = meta.split()
         if kind != b"blob":
             continue  # submodules (gitlinks) have no content here
-        items.append((mode, sha.decode(), raw_path.decode("utf-8", "replace")))
+        try:
+            path = raw_path.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise TreeError(
+                f"Git path {raw_path!r} is not valid UTF-8; rename it before publishing"
+            ) from exc
+        items.append((mode, sha.decode(), path))
     if not items:
         return []
 

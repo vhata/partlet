@@ -90,6 +90,59 @@ def test_second_run_without_changes_is_unchanged(mono, tmp_path, first, serve):
     assert (tmp_path / "clone" / "a.txt").read_text() == "one\n"
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_non_utf8_paths_fail_before_project_store_changes(
+    mono, tmp_path, first, serve, existing
+):
+    store, approved = first
+    if existing:
+        assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    before = {key: store.get(key) for key in store.list("s/p/foo/")}
+    mono.commit_raw(
+        {b"foo/file-\xfe.txt": b"first", b"foo/file-\xff.txt": b"second"},
+        "byte-distinct filenames",
+    )
+    # Approve the new tip so the first publish reaches site validation too.
+    invalid_tip = export_tip(mono, tmp_path)
+    result = run(mono, tmp_path, store, invalid_tip)["foo"]
+    assert result.status == "failed"
+    assert result.tip == invalid_tip
+    assert "not valid UTF-8" in result.reason
+    assert r"file-\xfe.txt" in result.reason
+    assert {key: store.get(key) for key in store.list("s/p/foo/")} == before
+    assert [p["name"] for p in json.loads(store.get("s/index.json"))] == (
+        ["foo"] if existing else []
+    )
+    assert run(mono, tmp_path, store, invalid_tip)["foo"].status == "failed"
+    if existing:
+        assert clone_text(serve, tmp_path) == "one\n"
+
+
+def test_non_utf8_paths_cannot_take_unchanged_shortcut(mono, tmp_path, first):
+    store, _ = first
+    mono.commit_raw({b"foo/file-\xff.txt": b"invalid"}, "byte filename")
+    tip = export_tip(mono, tmp_path)
+    # Simulate pointers written by a publisher that used lossy decoding.
+    store.put("s/p/foo/git/info/refs", f"{tip}\trefs/heads/main\n".encode())
+    store.put(
+        "s/p/foo/current",
+        json.dumps(
+            {
+                "name": "foo",
+                "description": "Foo tool",
+                "tip": tip,
+                "build": build_id(tip, "Foo tool", "https://partlet.example"),
+                "updated": "2026-01-01T00:00:00Z",
+            }
+        ).encode(),
+    )
+    before = {key: store.get(key) for key in store.list("s/p/foo/")}
+    result = run(mono, tmp_path, store, tip)["foo"]
+    assert result.status == "failed" and "not valid UTF-8" in result.reason
+    assert result.tip == tip
+    assert {key: store.get(key) for key in store.list("s/p/foo/")} == before
+
+
 def test_new_commits_publish_and_old_build_is_cleaned_up_one_publish_later(
     mono, tmp_path, first
 ):

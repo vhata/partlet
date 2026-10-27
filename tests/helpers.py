@@ -52,10 +52,24 @@ class Repo:
         git("rm", "-r", "-q", rel, cwd=self.path)
 
     def commit(self, message: str) -> str:
+        git("add", "-A", cwd=self.path)
+        return self._commit_index(message)
+
+    def commit_raw(self, files: Mapping[bytes, bytes], message: str) -> str:
+        """Commit byte paths via the index, without filesystem limitations."""
+        records = []
+        for path, data in files.items():
+            sha = git("hash-object", "-w", "--stdin", cwd=self.path, input=data)
+            records.append(b"100644 " + sha.stdout.strip() + b"\t" + path + b"\0")
+        git(
+            "update-index", "-z", "--index-info", cwd=self.path, input=b"".join(records)
+        )
+        return self._commit_index(message)
+
+    def _commit_index(self, message: str) -> str:
         self._tick += 1
         date = f"{EPOCH + self._tick * 60} +0000"
         env = {"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
-        git("add", "-A", cwd=self.path)
         git("commit", "-q", "--allow-empty", "-m", message, cwd=self.path, env=env)
         return git_out("rev-parse", "HEAD", cwd=self.path)
 

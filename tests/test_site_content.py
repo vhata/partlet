@@ -1,10 +1,20 @@
+import pytest
+
 from partlet.export import export_project
 from partlet.manifest import Project
 from partlet.site import urls
 from partlet.site.highlight import highlight_file, pygments_css
 from partlet.site.links import Linker
 from partlet.site.markdown import render_markdown
-from partlet.site.tree import SIZE_CAP, FileEntry, is_binary, is_viewable, read_tree
+from partlet.site.render import ProjectInfo, render_project
+from partlet.site.tree import (
+    SIZE_CAP,
+    FileEntry,
+    TreeError,
+    is_binary,
+    is_viewable,
+    read_tree,
+)
 
 
 def test_read_tree_reads_files_and_symlinks(mono, tmp_path):
@@ -29,6 +39,38 @@ def test_binary_and_viewable():
     assert not is_viewable(FileEntry("a.txt", b"x" * (SIZE_CAP + 1)))
     assert not is_viewable(FileEntry("a.bin", b"\x00"))
     assert not is_viewable(FileEntry("l", b"target", is_symlink=True))
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {b"file-\xfe.txt": b"first", b"file-\xff.txt": b"second"},
+        {b"dir-\xff/leaf.txt": b"nested"},
+        {b"file-\xc0\xaf.txt": b"overlong encoding"},
+    ],
+)
+def test_read_tree_rejects_non_utf8_paths(mono, files):
+    tip = mono.commit_raw(files, "byte paths")
+    with pytest.raises(TreeError) as exc:
+        read_tree(mono.path, tip)
+    assert "not valid UTF-8" in str(exc.value)
+    assert repr(next(iter(files))) in str(exc.value)
+
+
+def test_unicode_paths_keep_distinct_site_keys_and_links(mono):
+    files = {"file-\ufffd.txt": b"replacement character", "dir/é.txt": b"accent"}
+    tip = mono.commit_raw({p.encode(): data for p, data in files.items()}, "Unicode")
+    entries = read_tree(mono.path, tip)
+    assert {e.path: e.data for e in entries} == files
+    pages = render_project(
+        ProjectInfo("foo", "", tip, "https://example.com", ""), entries
+    )
+    for path, data in files.items():
+        assert pages[f"raw/{path}"] == data
+        assert urls.raw_url("foo", path).encode() in pages[f"blob/{path}"]
+        parent = path.rpartition("/")[0]
+        tree_key = f"tree/{parent}/index.html" if parent else "index.html"
+        assert urls.blob_url("foo", path).encode() in pages[tree_key]
 
 
 def test_urls_percent_encode():
