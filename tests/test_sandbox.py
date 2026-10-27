@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -127,6 +129,165 @@ def test_sandbox_holds_inside_an_enclosing_repository(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert f"{len(SANDBOX_TESTS)} passed" in proc.stdout
     assert [p.read_bytes() for p in watched] == before
+
+
+@pytest.fixture
+def collection_project(tmp_path):
+    """Collect copies of the real sandbox inside a disposable checkout."""
+    outer = Repo(tmp_path / "outer")
+    tests = outer.path / "tests"
+    tests.mkdir()
+    for name in ("conftest.py", "helpers.py"):
+        shutil.copyfile(PROJECT_ROOT / "tests" / name, tests / name)
+    (outer.path / "pytest.ini").write_text("[pytest]\npythonpath = tests\n")
+    original_home = tmp_path / "original-home"
+    original_home.mkdir()
+    original_config = original_home / ".gitconfig"
+    original_config.write_text("[user]\n\temail = original@example.com\n")
+    original_xdg = tmp_path / "original-xdg"
+    (original_xdg / "git").mkdir(parents=True)
+    (original_xdg / "git" / "config").write_text("[user]\n\temail = xdg@example.com\n")
+    base = outer.path / "bt"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        HOME=str(original_home),
+        XDG_CONFIG_HOME=str(original_xdg),
+        GIT_CONFIG_GLOBAL=str(original_config),
+        GIT_DIR=str(tmp_path / "missing-git-dir"),
+        GIT_WORK_TREE=str(tmp_path / "missing-work-tree"),
+        GIT_INDEX_FILE=str(tmp_path / "missing-index"),
+        GIT_CONFIG_COUNT="1",
+        GIT_CONFIG_KEY_0="user.email",
+        GIT_CONFIG_VALUE_0="inherited@example.com",
+        PARTLET_PROBE_ORIGINAL_HOME=str(original_home),
+        PARTLET_PROBE_ORIGINAL_XDG=str(original_xdg),
+        PARTLET_PROBE_ORIGINAL_CONFIG=str(original_config),
+        PARTLET_PROBE_BASETEMP=str(base),
+    )
+    probe = tests / "test_collection_probe.py"
+    probe.write_text(
+        """\
+import os
+from pathlib import Path
+import subprocess
+
+# These checks execute during collection, before any fixture can protect us.
+home = Path(os.environ["HOME"])
+assert home != Path(os.environ["PARTLET_PROBE_ORIGINAL_HOME"])
+assert os.environ["XDG_CONFIG_HOME"] != os.environ["PARTLET_PROBE_ORIGINAL_XDG"]
+assert os.environ["GIT_CONFIG_GLOBAL"] == str(home / ".gitconfig")
+assert os.environ["GIT_CONFIG_NOSYSTEM"] == "1"
+assert not any(name.startswith("GIT_") and name not in {
+    "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CEILING_DIRECTORIES"
+} for name in os.environ)
+for cwd in (Path.cwd(), Path(os.environ["PARTLET_PROBE_BASETEMP"])):
+    discovered = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=cwd,
+        capture_output=True, text=True,
+    )
+    assert discovered.returncode != 0, discovered.stdout
+configured = subprocess.run(
+    ["git", "config", "--global", "user.email"],
+    capture_output=True, text=True, check=True,
+)
+assert configured.stdout.strip() == "author@example.com"
+
+def test_collected_probe():
+    pass
+"""
+    )
+    return outer, probe, original_config, base, env
+
+
+def _run_collection_project(project, *args):
+    outer, _, _, base, env = project
+    # Inspect the same interpreter after pytest.main returns: cleanup must also
+    # work when no fixture ever starts, as with collection errors/collect-only.
+    runner = """\
+import os
+from pathlib import Path
+import sys
+import pytest
+
+def watched_env():
+    return {key: value for key, value in os.environ.items()
+            if key.startswith("GIT_") or key in {"HOME", "XDG_CONFIG_HOME"}}
+
+before_env = watched_env()
+before_cwd = Path.cwd()
+result = pytest.main(sys.argv[1:])
+assert Path.cwd() == before_cwd, (Path.cwd(), before_cwd)
+assert watched_env() == before_env, (watched_env(), before_env)
+print("sandbox lifecycle restored")
+raise SystemExit(result)
+"""
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            runner,
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            f"--basetemp={base}",
+            "tests/test_collection_probe.py",
+            *args,
+        ],
+        cwd=outer.path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("mode", ["normal", "collect-only", "collection-error"])
+def test_collection_is_sandboxed_and_cleanup_restores_process(collection_project, mode):
+    outer, probe, original_config, _, _ = collection_project
+    config_before = original_config.read_bytes()
+    repo_before = _snapshot(outer)
+    if mode == "collection-error":
+        with probe.open("a") as stream:
+            stream.write('\nraise RuntimeError("collection lifecycle sentinel")\n')
+    args = ("--collect-only",) if mode == "collect-only" else ()
+    proc = _run_collection_project(collection_project, *args)
+    output = proc.stdout + proc.stderr
+    expected = pytest.ExitCode.INTERRUPTED if mode == "collection-error" else 0
+    assert proc.returncode == expected, output
+    assert "sandbox lifecycle restored" in output
+    if mode == "collection-error":
+        assert "collection lifecycle sentinel" in output
+    else:
+        assert ("1 test collected" if args else "1 passed") in output
+    assert original_config.read_bytes() == config_before
+    assert _snapshot(outer) == repo_before
+
+
+@pytest.mark.parametrize("collect_only", [False, True])
+def test_collection_tripwire_watches_original_user_config(
+    collection_project, collect_only
+):
+    _, probe, original_config, _, _ = collection_project
+    original = original_config.read_bytes()
+    with probe.open("a") as stream:
+        stream.write(
+            '\nPath(os.environ["PARTLET_PROBE_ORIGINAL_CONFIG"]).write_text('
+            "'[user]\\n\\temail = changed@example.com\\n')\n"
+        )
+    args = ("--collect-only",) if collect_only else ()
+    proc = _run_collection_project(collection_project, *args)
+    output = proc.stdout + proc.stderr
+    assert proc.returncode == pytest.ExitCode.TESTS_FAILED, output
+    assert "sandbox lifecycle restored" in output
+    assert "REPOSITORY TRIPWIRE FIRED" in output
+    assert str(original_config) in output
+    assert "-\temail = original@example.com" in output
+    backup_match = re.search(r"Original contents are backed up in (\S+)", output)
+    assert backup_match is not None, output
+    backup = Path(backup_match[1])
+    assert str(original_config) in (backup / "MANIFEST.txt").read_text()
+    assert any(path.read_bytes() == original for path in backup.iterdir())
+    shutil.rmtree(backup)
 
 
 def _snapshot(repo: Repo) -> dict[str, bytes | None]:
