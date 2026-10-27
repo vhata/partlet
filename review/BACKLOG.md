@@ -29,9 +29,3 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
   - Starting point: `tests/conftest.py:50` and `tests/conftest.py:94`; capture and arm the tripwire before entering isolation.
   - Findings: `collection-before-git-sandbox`
   - Validation: use a synthetic enclosing repository and original HOME; at module import, a read-only Git discovery probe must not find that repository and configuration must already be isolated. Keep existing sandbox/tripwire checks passing.
-
-- [PUBLISHER] `export-qualified-branch` — **Resolve export preflight paths against the exact publishing branch.** A same-named tag currently shadows a valid branch directory and stops export.
-  - Source: review/2026-10-24-0250-full.md, 2026-10-24
-  - Starting point: `src/partlet/export.py:74` (`_require_directory`).
-  - Findings: `export-branch-tag-shadow`
-  - Validation: create tag `main` before adding a project to branch `main`, then export; require success and the branch's actual contents. A missing branch or directory must still fail.
