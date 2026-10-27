@@ -49,8 +49,3 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 ### P3 Low
 
 ### Unprioritized
-
-- [ACTION] `r2-publishing-plan` — **Write the implementation plan for publishing to R2.** Plan 3 of 3: R2 store, gitleaks, `partlet review`, `publish` and `unpublish`, the composite action and the end-to-end test.
-  - Source: plans/2026-10-15-publisher-core.md, 2026-10-15
-  - The export needs a local `refs/heads/<branch>` in the monorepo checkout and fails with "branch ... not found" without one; the action's checkout step must provide it.
-  - The test sandbox in `tests/conftest.py` must also strip R2 and Cloudflare credential variables, so no test can reach a real bucket; the R2 store's tests run against a local or fake endpoint only.
