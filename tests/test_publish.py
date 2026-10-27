@@ -1,8 +1,9 @@
+import hashlib
 import json
 
 import pytest
 
-from partlet import gitstatic
+from partlet import __version__, gitstatic
 from partlet.archive import ARCHIVE_FORMATS
 from partlet.gitstatic import PACK_EXTS, read_state
 from partlet.gitutil import git, git_out
@@ -141,6 +142,69 @@ def test_non_utf8_paths_cannot_take_unchanged_shortcut(mono, tmp_path, first):
     assert result.status == "failed" and "not valid UTF-8" in result.reason
     assert result.tip == tip
     assert {key: store.get(key) for key in store.list("s/p/foo/")} == before
+
+
+def test_publish_index_html_directory_and_clone(mono, tmp_path, serve):
+    mono.write("foo/docs/index.html/leaf.txt", "leaf\n")
+    mono.commit("directory named index.html")
+    approved = export_tip(mono, tmp_path)
+    store = LocalStore(tmp_path / "out")
+    result = run(mono, tmp_path, store, approved)["foo"]
+    assert result.status == "published", result.reason
+    current = json.loads(store.get("s/p/foo/current"))
+    prefix = f"s/p/foo/site/{current['build']}"
+    parent = store.get(f"{prefix}/tree/docs/index.html")
+    child = store.get(f"{prefix}/tree/docs/children/index.html/index.html")
+    assert b'href="/foo/tree/docs/index.html"' in parent
+    assert b'href="/foo/blob/docs/index.html/leaf.txt"' in child
+    assert parent != child
+    with serve(tmp_path / "out") as base:
+        git("clone", "-q", f"{base}/s/p/foo/git", str(tmp_path / "clone"), cwd=tmp_path)
+    assert (tmp_path / "clone/docs/index.html/leaf.txt").read_text() == "leaf\n"
+
+
+def test_legacy_directory_layout_is_rerendered(mono, tmp_path, monkeypatch):
+    from partlet import publish
+    from partlet.site.render import render_project
+
+    def legacy_build_id(tip, description, base_url):
+        digest = hashlib.sha256(
+            f"{tip}\0{description}\0{base_url}\0{__version__}".encode()
+        )
+        return digest.hexdigest()[:16]
+
+    def legacy_render(info, entries):
+        return {
+            key.replace("/children/", "/") if key.startswith("tree/") else key: data
+            for key, data in render_project(info, entries).items()
+        }
+
+    mono.write("foo/docs/sub/leaf.txt", "leaf\n")
+    mono.commit("nested directory")
+    approved = export_tip(mono, tmp_path)
+    store = LocalStore(tmp_path / "out")
+    with monkeypatch.context() as mp:
+        mp.setattr(publish, "build_id", legacy_build_id)
+        mp.setattr(publish, "render_project", legacy_render)
+        assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    old_build = json.loads(store.get("s/p/foo/current"))["build"]
+    old_page = f"s/p/foo/site/{old_build}/tree/docs/sub/index.html"
+    assert store.get(old_page) is not None
+    packs = store.list("s/p/foo/git/objects/pack/")
+
+    result = run(mono, tmp_path, store, approved)["foo"]
+    assert result.status == "published"
+    assert result.reason == "re-rendered"
+    current = json.loads(store.get("s/p/foo/current"))
+    assert current["build"] != old_build
+    assert current["previous"]["build"] == old_build
+    assert store.get(old_page) is not None
+    assert (
+        store.get(f"s/p/foo/site/{current['build']}/tree/docs/children/sub/index.html")
+        is not None
+    )
+    assert store.list("s/p/foo/git/objects/pack/") == packs
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
 
 
 def test_new_commits_publish_and_old_build_is_cleaned_up_one_publish_later(

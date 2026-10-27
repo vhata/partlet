@@ -11,9 +11,3 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 ## P3 Low
 
 ## Unprioritized
-
-- [SITE] `site-directory-key-layout` — **Make directory page keys representable by the local store.** A directory named `index.html` currently collides with its parent's page and fails publication.
-  - Source: review/2026-10-24-0250-full.md, 2026-10-24
-  - Starting point: `src/partlet/site/render.py:107`; coordinate the chosen layout with the future Worker route lookup.
-  - Findings: `site-directory-index-key-collision`
-  - Validation: publish an approved project containing `docs/index.html/leaf.txt` into a LocalStore; require success, distinct readable directory pages and a working clone.
