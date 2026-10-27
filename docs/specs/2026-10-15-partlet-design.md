@@ -265,6 +265,14 @@ next consolidation or rewrite drops it.
 Everything sits under a per-source prefix so a future version can serve
 several sources from one bucket.
 
+Within a site build, `index.html` is the project page. Directory pages
+join the original directory segments with `/children/`, under `tree/`,
+then append `/index.html`: `docs/index.html` becomes
+`tree/docs/children/index.html/index.html`. A directory's own page and
+its descendants occupy separate namespaces so the local filesystem can
+store both. File viewers use `blob/<path>` and raw files `raw/<path>`.
+This storage mapping does not change the public URLs below.
+
 ## Worker
 
 ### URLs

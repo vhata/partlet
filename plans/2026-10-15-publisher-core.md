@@ -1,5 +1,10 @@
 # Publisher Core Implementation Plan
 
+The directory-page key layout below records the original implementation.
+The current layout and build-ID salt are documented in
+[Decisions](../docs/DECISIONS.md#2026-10-26) and the
+[Worker plan](2026-10-17-worker.md#dependencies-on-the-review-backlog).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A `partlet build --out <dir>` command that exports every approved project from a monorepo, checks its history, and writes a complete Partlet site (dumb-HTTP Git files, rendered pages, raw files, archives, site index) into a local directory, such that `git clone` and `git pull` work against that directory served by any static HTTP server.

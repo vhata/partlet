@@ -104,7 +104,11 @@ def render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, byt
             ],
             readme_html=_readme_html(files, directory, linker),
         )
-        key = "index.html" if not directory else f"tree/{directory}/index.html"
+        # Each node holds index.html and a separate namespace for its children.
+        # Repository directories named index.html (or children) stay ordinary
+        # path components without becoming ancestors of a stored page file.
+        tree_path = "/children/".join(directory.split("/"))
+        key = "index.html" if not directory else f"tree/{tree_path}/index.html"
         out[key] = html.encode("utf-8")
 
     for entry in entries:

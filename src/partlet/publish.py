@@ -24,6 +24,10 @@ from partlet.site.render import (
 from partlet.site.tree import TreeError, read_tree
 from partlet.store import Store
 
+# Changing stored page keys must rebuild even when the package version and
+# repository tip are unchanged, and must leave earlier builds immutable.
+SITE_LAYOUT = "directory-children-v1"
+
 
 @dataclass(frozen=True)
 class ProjectResult:
@@ -38,7 +42,9 @@ def project_prefix(source: str, name: str) -> str:
 
 
 def build_id(tip: str, description: str, base_url: str) -> str:
-    digest = hashlib.sha256(f"{tip}\0{description}\0{base_url}\0{__version__}".encode())
+    digest = hashlib.sha256(
+        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}".encode()
+    )
     return digest.hexdigest()[:16]
 
 

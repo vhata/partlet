@@ -5,6 +5,7 @@ from partlet.site.render import (
     site_stylesheet,
 )
 from partlet.site.tree import SIZE_CAP, FileEntry
+from partlet.store import LocalStore
 
 INFO = ProjectInfo(
     "foo", "Foo tool", "a" * 40, "https://partlet.example", "2026-01-01T00:00:00+00:00"
@@ -29,7 +30,7 @@ def test_keys_for_every_file_and_directory():
     assert set(pages) == {
         "index.html",
         "tree/src/index.html",
-        "tree/src/deep/index.html",
+        "tree/src/children/deep/index.html",
         "blob/README.md",
         "blob/src/main.py",
         "blob/src/deep/x.txt",
@@ -38,6 +39,39 @@ def test_keys_for_every_file_and_directory():
         "raw/src/deep/x.txt",
     }
     assert pages["raw/src/main.py"] == b"print(1)\n"
+
+
+def test_directory_pages_do_not_collide_with_descendants(tmp_path):
+    pages = render_project(
+        INFO,
+        [
+            FileEntry("docs/index.html/index.html/leaf.txt", b"nested\n"),
+            FileEntry("docs/children/leaf.txt", b"namespace\n"),
+            FileEntry("index.html/leaf.txt", b"root\n"),
+        ],
+    )
+    store = LocalStore(tmp_path)
+    for key, data in pages.items():
+        store.put(key, data)
+    assert all(store.get(key) == data for key, data in pages.items())
+    assert b'href="/foo/tree/docs/index.html"' in store.get("tree/docs/index.html")
+    assert b'href="/foo/tree/docs/index.html/index.html"' in store.get(
+        "tree/docs/children/index.html/index.html"
+    )
+    assert b"leaf.txt" in store.get(
+        "tree/docs/children/index.html/children/index.html/index.html"
+    )
+    assert b"leaf.txt" in store.get("tree/docs/children/children/index.html")
+    assert b"leaf.txt" in store.get("tree/index.html/index.html")
+
+
+def test_nested_directory_key_keeps_original_name_segments():
+    pages = render([FileEntry("docs/a!'()*~%é/leaf.txt", b"leaf\n")])
+    assert (
+        'href="/foo/tree/docs/a%21%27%28%29%2A~%25%C3%A9"'
+        in pages["tree/docs/index.html"]
+    )
+    assert "leaf.txt" in pages["tree/docs/children/a!'()*~%é/index.html"]
 
 
 def test_project_page_has_readme_clone_url_and_downloads():
