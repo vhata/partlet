@@ -21,7 +21,7 @@ from partlet.site.render import (
     render_site_index,
     site_stylesheet,
 )
-from partlet.site.tree import read_tree
+from partlet.site.tree import TreeError, read_tree
 from partlet.store import Store
 
 
@@ -106,6 +106,9 @@ def publish_project(
         )
         current = _read_json(store, f"{prefix}/current")
         build = build_id(tip, project.description, site.base_url)
+        # Validate paths even for an existing build produced by an older
+        # publisher, and before any uploads or pointer changes.
+        entries = read_tree(repo, tip)
         if decision.action == "unchanged" and current and current.get("build") == build:
             _sweep(store, prefix)
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
@@ -127,7 +130,7 @@ def publish_project(
         info = ProjectInfo(
             project.name, project.description, tip, site.base_url, updated
         )
-        for key, data in render_project(info, read_tree(repo, tip)).items():
+        for key, data in render_project(info, entries).items():
             store.put(f"{prefix}/site/{build}/{key}", data)
         for fmt, data in make_archives(repo, project.name, tip).items():
             store.put(f"{prefix}/archive/{tip}.{fmt}", data)
@@ -158,7 +161,7 @@ def publish_project(
         _sweep(store, prefix)
         reason = "re-rendered" if decision.action == "unchanged" else decision.reason
         return ProjectResult(project.name, "published", tip, reason)
-    except (ExportError, HistoryError, GitError) as e:
+    except (ExportError, HistoryError, GitError, TreeError) as e:
         return ProjectResult(project.name, "failed", tip, str(e))
 
 

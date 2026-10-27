@@ -2,6 +2,12 @@
 
 Non-obvious choices and their trade-offs, dated, newest section first. Read the relevant entry before changing a mechanism that looks odd. Choices made autonomously under a delegation are recorded here for the user to review; an entry is a record, not a claim that the capability is complete.
 
+## 2026-10-26
+
+| Decision | Reason and trade-off |
+| --- | --- |
+| Reject export-tip file paths that are not valid UTF-8 before any project uploads, pointer changes or unchanged-build shortcut. | Git paths are bytes, but site keys, HTML and URLs use Unicode. Replacement decoding merges distinct byte paths and silently overwrites site output. Strict decoding reports the offending byte path so it can be renamed; valid Unicode, including a literal replacement character, remains supported. Cost: non-UTF-8 tip paths block the project's publication, and unchanged runs read the tip's blobs to validate paths. Historical paths outside the tip are not subject to this site check. |
+
 ## 2026-10-17
 
 | Decision | Reason and trade-off |
