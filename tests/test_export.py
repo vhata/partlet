@@ -155,6 +155,58 @@ def test_branch_is_renamed_to_main(tmp_path):
     assert refs == ["refs/heads/main"]
 
 
+@pytest.mark.parametrize("tag_has_project", [False, True])
+def test_export_uses_branch_directory_despite_same_named_tag(
+    mono, tmp_path, tag_has_project
+):
+    mono.write("other.txt", "outside the project\n")
+    if tag_has_project:
+        mono.write("foo/a.txt", "tag contents\n")
+    mono.commit("tagged snapshot")
+    git("tag", "main", cwd=mono.path)
+    mono.write("foo/a.txt", "branch contents\n")
+    mono.commit("project on branch")
+
+    dest = tmp_path / "e.git"
+    tip = export_project(mono.path, "main", Project("foo", "foo"), dest)
+
+    assert files_at(dest) == ["a.txt"]
+    assert git_out("show", f"{tip}:a.txt", cwd=dest) == "branch contents"
+
+
+@pytest.mark.parametrize(
+    ("branch_path", "message"),
+    [("missing", "does not exist on main"), ("file", "not a directory")],
+)
+def test_export_rejects_branch_path_despite_same_named_tag_directory(
+    mono, tmp_path, branch_path, message
+):
+    mono.write("foo/a.txt", "tag contents\n")
+    mono.write("other.txt", "outside the project\n")
+    mono.commit("tagged directory")
+    git("tag", "main", cwd=mono.path)
+    mono.rm("foo")
+    if branch_path == "file":
+        mono.write("foo", "branch file\n")
+    mono.commit("project removed from branch")
+
+    dest = tmp_path / "new" / "e.git"
+    with pytest.raises(ExportError, match=message):
+        export_project(mono.path, "main", Project("foo", "foo"), dest)
+    assert not dest.parent.exists()
+
+
+def test_export_rejects_a_tag_without_a_branch(mono, tmp_path):
+    mono.write("foo/a.txt", "tag contents\n")
+    mono.commit("tagged directory")
+    git("tag", "release", cwd=mono.path)
+
+    dest = tmp_path / "new" / "e.git"
+    with pytest.raises(ExportError, match="branch 'release' not found"):
+        export_project(mono.path, "release", Project("foo", "foo"), dest)
+    assert not dest.parent.exists()
+
+
 def test_export_checks_the_destination_before_each_mutating_step(tmp_path, monkeypatch):
     from helpers import Repo
 

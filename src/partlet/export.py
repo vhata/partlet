@@ -71,7 +71,7 @@ def export_project(
 def _require_directory(monorepo: Path, branch: str, path: str) -> None:
     if not _branch_exists(monorepo, branch):
         raise ExportError(f"branch {branch!r} not found in {monorepo}")
-    proc_type = _object_type(monorepo, f"{branch}:{path}")
+    proc_type = _object_type(monorepo, f"refs/heads/{branch}:{path}")
     if proc_type is None:
         raise ExportError(
             f"{path!r} does not exist on {branch}. If the directory moved, set path "
