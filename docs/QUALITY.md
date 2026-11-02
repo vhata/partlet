@@ -74,7 +74,7 @@ gates, local preview and the cache/retention evidence limit.
 Read by `docket/CODE_REVIEW_GUIDE.md`, which links this section by its heading, so keep the heading as it is; a codebase review runs and records exactly what is listed here.
 
 - Focus areas: the properties under [What quality means here](#what-quality-means-here) and the design in `docs/specs/`.
-- Baseline commands beyond `bash scripts/check.sh`: `partlet build --out <dir>` against a synthetic monorepo, then `git clone` from that directory served over HTTP.
+- Baseline commands beyond `bash scripts/check.sh`: `partlet build --out <dir>` against a synthetic monorepo, then `git clone` from that directory served over HTTP. Exercise `partlet publish` against the moto fixture's loopback endpoint for the R2 path; the normal suite includes full interruption/retry checks.
 - Drift checks for an incremental review: this document against `.githooks/`, `scripts/` and `.github/workflows/`; plan status in `plans/` against merged work.
 - Source paths for `bash docket/scripts/review-due.sh --paths "src worker scripts"`.
 - Expected tracked files: Markdown, shell scripts, YAML under `.github/`, `.githooks/*`, `LICENSE`, `.gitignore`; Python, TOML, TypeScript, JSON, HTML and CSS once the publisher and Worker land.

@@ -12,9 +12,9 @@ from partlet import __version__
 from partlet.archive import ARCHIVE_FORMATS, make_archives
 from partlet.export import ExportError, export_project
 from partlet.gitstatic import PACK_EXTS, read_state, upload_pack, write_pointers
-from partlet.gitutil import GitError, git_out
+from partlet.gitutil import GitError, git, git_out
 from partlet.history import HistoryError, check_history
-from partlet.manifest import Manifest, Project, Site
+from partlet.manifest import NAME_RE, Manifest, Project, Site, parse_manifest
 from partlet.scan import ScanError, Scanner
 from partlet.site.render import (
     ProjectInfo,
@@ -23,7 +23,7 @@ from partlet.site.render import (
     site_stylesheet,
 )
 from partlet.site.tree import TreeError, read_tree
-from partlet.store import LocalPathError, LocalStore, Store
+from partlet.store import LocalPathError, LocalStore, Store, StoreError
 
 # Changing stored page keys must rebuild even when the package version and
 # repository tip are unchanged, and must leave earlier builds immutable.
@@ -199,6 +199,60 @@ def publish_project(
         return ProjectResult(project.name, "failed", tip, str(e))
 
 
+class CheckoutError(Exception):
+    """The source checkout does not match the publishing branch and manifest."""
+
+
+def check_checkout(
+    repo: Path,
+    branch: str,
+    manifest_path: Path,
+    *,
+    expected_manifest: Manifest | None = None,
+) -> None:
+    """Require HEAD at the publishing tip and the manifest exactly as committed."""
+    try:
+        head = git_out("rev-parse", "--verify", "HEAD^{commit}", cwd=repo)
+        toplevel = Path(git_out("rev-parse", "--show-toplevel", cwd=repo))
+    except GitError as exc:
+        raise CheckoutError(f"{repo} is not a git checkout: {exc}") from exc
+    try:
+        tip = git_out(
+            "rev-parse", "--verify", f"refs/heads/{branch}^{{commit}}", cwd=repo
+        )
+    except GitError:
+        raise CheckoutError(
+            f"branch {branch!r} not found in {repo}: publishing needs a local "
+            f"refs/heads/{branch}"
+        ) from None
+    if head != tip:
+        raise CheckoutError(
+            f"HEAD is {head[:12]} but {branch} is at {tip[:12]}; partlet publish "
+            f"runs from a checkout of the tip of {branch}"
+        )
+    try:
+        relative = manifest_path.resolve().relative_to(toplevel.resolve())
+    except ValueError:
+        raise CheckoutError(f"{manifest_path} is not inside {toplevel}") from None
+    try:
+        committed = git("show", f"{tip}:{relative.as_posix()}", cwd=repo).stdout
+    except GitError:
+        raise CheckoutError(f"{relative} is not committed on {branch}") from None
+    try:
+        actual = manifest_path.read_bytes()
+    except OSError as exc:
+        raise CheckoutError(f"cannot read {manifest_path}: {exc}") from exc
+    if actual != committed:
+        raise CheckoutError(
+            f"{relative} differs from the version committed on {branch}"
+        )
+    if (
+        expected_manifest is not None
+        and parse_manifest(committed.decode("utf-8")) != expected_manifest
+    ):
+        raise CheckoutError("manifest changed while reading; run partlet publish again")
+
+
 def write_site_index(store: Store, site: Site) -> None:
     projects = []
     for name in store.list_dirs(f"{site.source}/p/"):
@@ -222,6 +276,28 @@ def write_site_index(store: Store, site: Site) -> None:
     store.put(
         f"{site.source}/static/style.css", site_stylesheet(), "text/css; charset=utf-8"
     )
+
+
+def unpublish_project(store: Store, site: Site, name: str) -> int:
+    """Retire the live pointer and index entry before deleting project objects.
+
+    A later invocation completes an interrupted removal. The trailing slash
+    keeps names sharing a prefix, such as foo and foobar, independent.
+    """
+    if not NAME_RE.fullmatch(name) or name.endswith(".git"):
+        raise ValueError(f"invalid project name {name!r}")
+    prefix = f"{project_prefix(site.source, name)}/"
+    keys = store.list(prefix)
+    current = f"{prefix}current"
+    store.delete(current)
+    write_site_index(store, site)
+    for key in keys:
+        if key != current:
+            store.delete(key)
+    left = store.list(prefix)
+    if left:
+        raise StoreError(f"{len(left)} keys remain under {prefix}, e.g. {left[0]}")
+    return len(keys)
 
 
 def publish_all(

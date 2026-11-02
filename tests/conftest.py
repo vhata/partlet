@@ -168,3 +168,45 @@ def mono(tmp_path):
 @pytest.fixture
 def serve():
     return serve_directory
+
+
+@pytest.fixture(scope="session")
+def moto_endpoint():
+    from moto.server import ThreadedMotoServer
+
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=0, verbose=False)
+    server.start()
+    host, port = server.get_host_and_port()
+    try:
+        yield f"http://{host}:{port}"
+    finally:
+        server.stop()
+
+
+@pytest.fixture
+def r2_config(moto_endpoint):
+    import uuid
+
+    import boto3
+    from helpers import FAKE_R2_KEY_ID, FAKE_R2_SECRET
+
+    from partlet.store import R2Config
+
+    bucket = f"partlet-test-{uuid.uuid4().hex[:12]}"
+    boto3.client(
+        "s3",
+        endpoint_url=moto_endpoint,
+        region_name="us-east-1",
+        aws_access_key_id=FAKE_R2_KEY_ID,
+        aws_secret_access_key=FAKE_R2_SECRET,
+    ).create_bucket(Bucket=bucket)
+    return R2Config(bucket, moto_endpoint, FAKE_R2_KEY_ID, FAKE_R2_SECRET)
+
+
+@pytest.fixture
+def r2_env(r2_config, monkeypatch):
+    monkeypatch.setenv("PARTLET_R2_ENDPOINT", r2_config.endpoint_url)
+    monkeypatch.setenv("PARTLET_R2_BUCKET", r2_config.bucket)
+    monkeypatch.setenv("PARTLET_R2_ACCESS_KEY_ID", r2_config.access_key_id)
+    monkeypatch.setenv("PARTLET_R2_SECRET_ACCESS_KEY", r2_config.secret_access_key)
+    return r2_config

@@ -96,8 +96,9 @@ virtualenv. The Worker is TypeScript, built and deployed with wrangler.
    `concurrency: { group: partlet, cancel-in-progress: false }`; runs
    `uses: <owner>/partlet@v1` with R2 credentials from secrets.
 
-3. Secrets: R2 account ID, access key ID, secret access key, bucket name. The
-   token is scoped to write the one bucket.
+3. Secrets: `PARTLET_R2_ACCOUNT_ID`, `PARTLET_R2_ACCESS_KEY_ID`,
+   `PARTLET_R2_SECRET_ACCESS_KEY` and `PARTLET_R2_BUCKET`. The token is
+   scoped to read and write the one bucket.
 
 The composite action installs Python, installs Partlet from the action's own
 checkout (so the version is pinned by the action ref), installs
@@ -254,6 +255,7 @@ next consolidation or rewrite drops it.
 ```
 <source>/index.html
 <source>/index.json
+<source>/lock                               present only while a run holds it
 <source>/p/<name>/current                    JSON: live build id, tip sha, updated time,
                                              previous build, tip and packs
 <source>/p/<name>/git/HEAD
@@ -372,6 +374,9 @@ lists emails so this can be decided before approval.
   with an `approved` pin, the next publish restores it, so remove the entry
   first.
 
+- `partlet unlock`: explicitly removes a stale source lock, after verifying
+  that its recorded holder has stopped.
+
 The site index is built from the projects that have a `current` file in R2,
 not from the manifest. A project dropped from the manifest therefore stays
 listed and served until it is unpublished.
@@ -389,6 +394,10 @@ listed and served until it is unpublished.
   check reads published state and then writes it, and because cleanup deletes
   every key no pointer names, which includes another publish's uploads that
   are not named yet.
+- Each CLI build, publish and unpublish also holds the store lock for its
+  whole run. Locks fail closed without expiry; `partlet unlock` removes
+  one left by a stopped run. A lost delete response is an unknown outcome
+  and is never retried automatically.
 
 ## Testing
 
