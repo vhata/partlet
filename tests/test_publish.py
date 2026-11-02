@@ -144,6 +144,74 @@ def test_non_utf8_paths_cannot_take_unchanged_shortcut(mono, tmp_path, first):
     assert {key: store.get(key) for key in store.list("s/p/foo/")} == before
 
 
+@pytest.mark.parametrize("existing", [False, True, "legacy"])
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("A.txt", "a.txt"),
+        ("é.txt", "e\u0301.txt"),
+        ("Docs/first", "docs/second"),
+        ("É/first", "E\u0301/second"),
+        ("A", "a/leaf"),
+    ],
+)
+def test_local_path_identity_before_uploads(mono, tmp_path, first, names, existing):
+    store, approved = first
+    if existing is True:
+        assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    files = {name: f"unique content {i}".encode() for i, name in enumerate(names)}
+    mono.commit_raw(
+        {f"foo/{name}".encode(): data for name, data in files.items()}, "Git paths"
+    )
+    tip = export_tip(mono, tmp_path)
+    # Prove these are distinct, byte-safe Git entries even on this Mac.
+    from partlet.site.tree import read_tree
+
+    entries = read_tree(max(tmp_path.glob("probe-*.git")), tip)
+    assert {e.path: e.data for e in entries if e.path in files} == files
+    if existing == "legacy":
+        # Simulate pointers from an older publisher with this build already live.
+        store.put("s/p/foo/git/info/refs", f"{tip}\trefs/heads/main\n".encode())
+        store.put(
+            "s/p/foo/current",
+            json.dumps(
+                {
+                    "tip": tip,
+                    "build": build_id(tip, "Foo tool", "https://partlet.example"),
+                }
+            ).encode(),
+        )
+    before = {key: store.get(key) for key in store.list("s/p/foo/")}
+    puts = []
+    original_put = store.put
+
+    def record(key, data, content_type=None):
+        puts.append(key)
+        original_put(key, data, content_type)
+
+    store.put = record
+    # Independently determine whether the names alias on this test volume.
+    probe = tmp_path / "identity-probe"
+    probe.mkdir()
+    (probe / names[0].split("/")[0]).touch()
+    aliases = (probe / names[1].split("/")[0]).exists()
+    result = run(mono, tmp_path, store, tip)["foo"]
+    if aliases:
+        assert result.status == "failed", result.reason
+        assert "local filesystem" in result.reason
+        assert not [k for k in puts if k.startswith("s/p/foo/")]
+        assert {key: store.get(key) for key in store.list("s/p/foo/")} == before
+    elif existing != "legacy":
+        assert result.status == "published", result.reason
+        current = json.loads(store.get("s/p/foo/current"))
+        for name, data in files.items():
+            prefix = f"s/p/foo/site/{current['build']}"
+            assert store.get(f"{prefix}/raw/{name}") == data
+            assert data in store.get(f"{prefix}/blob/{name}")
+    else:
+        assert result.status == "unchanged", result.reason
+
+
 def test_publish_index_html_directory_and_clone(mono, tmp_path, serve):
     mono.write("foo/docs/index.html/leaf.txt", "leaf\n")
     mono.commit("directory named index.html")

@@ -22,7 +22,7 @@ from partlet.site.render import (
     site_stylesheet,
 )
 from partlet.site.tree import TreeError, read_tree
-from partlet.store import Store
+from partlet.store import LocalPathError, LocalStore, Store
 
 # Changing stored page keys must rebuild even when the package version and
 # repository tip are unchanged, and must leave earlier builds immutable.
@@ -115,6 +115,13 @@ def publish_project(
         # Validate paths even for an existing build produced by an older
         # publisher, and before any uploads or pointer changes.
         entries = read_tree(repo, tip)
+        updated = git_out("show", "-s", "--format=%cI", tip, cwd=repo)
+        info = ProjectInfo(
+            project.name, project.description, tip, site.base_url, updated
+        )
+        rendered = render_project(info, entries)
+        if isinstance(store, LocalStore):
+            store.validate_keys(f"{prefix}/site/{build}/{key}" for key in rendered)
         if decision.action == "unchanged" and current and current.get("build") == build:
             _sweep(store, prefix)
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
@@ -132,11 +139,7 @@ def publish_project(
                 full=decision.action == "rewrite",
             )
 
-        updated = git_out("show", "-s", "--format=%cI", tip, cwd=repo)
-        info = ProjectInfo(
-            project.name, project.description, tip, site.base_url, updated
-        )
-        for key, data in render_project(info, entries).items():
+        for key, data in rendered.items():
             store.put(f"{prefix}/site/{build}/{key}", data)
         for fmt, data in make_archives(repo, project.name, tip).items():
             store.put(f"{prefix}/archive/{tip}.{fmt}", data)
@@ -167,7 +170,7 @@ def publish_project(
         _sweep(store, prefix)
         reason = "re-rendered" if decision.action == "unchanged" else decision.reason
         return ProjectResult(project.name, "published", tip, reason)
-    except (ExportError, HistoryError, GitError, TreeError) as e:
+    except (ExportError, HistoryError, GitError, TreeError, LocalPathError) as e:
         return ProjectResult(project.name, "failed", tip, str(e))
 
 
