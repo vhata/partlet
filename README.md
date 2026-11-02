@@ -11,3 +11,6 @@ clone/pull validation and user-run deployment instructions.
 MIT. See [LICENSE](LICENSE).
 
 Partlet is being built with help from [Claude Code](https://claude.com/claude-code).
+
+Publisher CLI, credentials, storage and recovery contracts are documented
+in [Publisher contracts](docs/PUBLISHING.md).

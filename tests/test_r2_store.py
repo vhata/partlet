@@ -319,3 +319,39 @@ def test_retry_and_checksum_settings(r2_config):
     assert store._delete_client.meta.config.retries["total_max_attempts"] == 1
     assert store._client.meta.config.request_checksum_calculation == "when_required"
     assert store._client.meta.config.response_checksum_validation == "when_required"
+
+
+def test_directory_listing_follows_every_page(r2_config):
+    store = R2Store(r2_config, page_size=2)
+    names = [f"project-{i}" for i in range(7)]
+    for name in names:
+        store.put(f"s/p/{name}/current", b"{}")
+    assert store.list_dirs("s/p/") == names
+
+
+def test_streaming_response_is_closed_on_success_and_failure(r2_config, monkeypatch):
+    from botocore.exceptions import ResponseStreamingError
+
+    store = R2Store(r2_config, max_attempts=2, retry_delay=0)
+    bodies = []
+
+    class Body:
+        closed = False
+
+        def read(self):
+            if len(bodies) == 1:
+                raise ResponseStreamingError(error="connection reset")
+            return b"complete"
+
+        def close(self):
+            self.closed = True
+
+    def response(**kw):
+        body = Body()
+        bodies.append(body)
+        return {"Body": body}
+
+    monkeypatch.setattr(store._client, "get_object", response)
+    assert store.get("s/object") == b"complete"
+    assert len(bodies) == 2
+    assert all(body.closed for body in bodies)
