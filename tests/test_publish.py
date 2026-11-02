@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from partlet import __version__, gitstatic
+from partlet import __version__, gitstatic, publish
 from partlet.archive import ARCHIVE_FORMATS
 from partlet.gitstatic import PACK_EXTS, read_state
 from partlet.gitutil import git, git_out
@@ -637,8 +637,8 @@ def live_keys(store):
     )
 
 
-def test_publish_interrupted_before_pointers_leaves_nothing_behind(
-    mono, tmp_path, first
+def test_publish_interrupted_before_pointers_retires_orphan_uploads(
+    mono, tmp_path, first, monkeypatch
 ):
     store, approved = first
     run(mono, tmp_path, store, approved)
@@ -655,8 +655,12 @@ def test_publish_interrupted_before_pointers_leaves_nothing_behind(
     mono.write("foo/a.txt", "one\ntwo\nthree\n")
     mono.commit("c3")
     assert run(mono, tmp_path, store, approved)["foo"].status == "published"
-    # The first publish's build and archives stay for one publish of grace;
-    # what the interrupted publish uploaded was never live and is gone.
+    # Orphan packs receive the same timed grace as advertised packs. Other
+    # orphan content is removed immediately; current/previous remain live.
+    now = publish.time.time()
+    assert any("/git/objects/pack/" in k for k in orphans & content_keys(store))
+    monkeypatch.setattr(publish.time, "time", lambda: now + 3601)
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
     assert content_keys(store) == live_keys(store) | gen1
     assert not orphans & content_keys(store)
 
@@ -680,7 +684,7 @@ def test_unchanged_run_removes_keys_of_an_abandoned_publish(mono, tmp_path, firs
 
 
 def test_publish_interrupted_after_current_still_retires_superseded_keys(
-    mono, tmp_path, first
+    mono, tmp_path, first, monkeypatch
 ):
     store, approved = first
     run(mono, tmp_path, store, approved)
@@ -710,11 +714,16 @@ def test_publish_interrupted_after_current_still_retires_superseded_keys(
     assert run(mono, tmp_path, store, new_tip, extra=allow)["foo"].status == (
         "published"
     )
+    now = publish.time.time()
+    monkeypatch.setattr(publish.time, "time", lambda: now + 3601)
+    assert run(mono, tmp_path, store, new_tip, extra=allow)["foo"].status == (
+        "unchanged"
+    )
     assert content_keys(store) == live_keys(store) | gen2
     assert not gen1 & content_keys(store)
 
 
-def test_consolidated_packs_are_deleted_one_publish_later(
+def test_consolidated_packs_keep_timed_grace_after_previous_publish(
     mono, tmp_path, first, monkeypatch
 ):
     monkeypatch.setattr(gitstatic, "MAX_PACKS", 2)
@@ -737,6 +746,12 @@ def test_consolidated_packs_are_deleted_one_publish_later(
     mono.write("foo/a.txt", "4\n")
     mono.commit("c4")
     run(mono, tmp_path, store, approved)
+    pack_keys = set(store.list("s/p/foo/git/objects/pack/"))
+    for pack in old_packs:
+        assert f"s/p/foo/git/objects/pack/{pack}.pack" in pack_keys
+    now = publish.time.time()
+    monkeypatch.setattr(publish.time, "time", lambda: now + 3601)
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
     pack_keys = set(store.list("s/p/foo/git/objects/pack/"))
     for pack in old_packs:
         assert f"s/p/foo/git/objects/pack/{pack}.pack" not in pack_keys

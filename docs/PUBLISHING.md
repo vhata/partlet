@@ -113,17 +113,36 @@ lock. Inspect the holder and establish that it has stopped before explicit
 recovery. If the failed delete did not land, the old lock remains and
 blocks subsequent runs.
 
-Immutable uploads precede live pointers. Superseded objects receive one
-publish of grace, and later runs sweep unreachable uploads left by an
-interruption. An interrupted publish can be retried after safe lock
+Immutable uploads precede live pointers. Superseded site builds and
+archives receive one publish of grace. Pack and index objects additionally
+remain for at least one hour after a sweep first observes them outside
+the live and previous pack lists. This includes abandoned uploads.
+Retirement times are persisted in `retired-packs.json` before deletion;
+retries and unchanged runs reuse them. A revived object loses its timer,
+so a later retirement gets a fresh hour. Invalid state fails closed.
+An interrupted publish can be retried after safe lock
 recovery. Unpublish removes `current` and refreshes the site index before
 retiring the remaining project objects; retrying finishes a partial
 unpublish. No automatic CI unpublish feature is provided.
 
-Rapid consecutive publications can retire a pack still needed by an
-in-flight client. One publish of grace is not timed retention; the
-`fetch-retention-window` follow-up in [the queue](../TODO.md) records
-the remaining integration requirement.
+The one-hour pack window covers the Worker's 60-second metadata freshness
+plus up to 59 minutes for a client to finish fetching advertised objects.
+It starts conservatively after an object leaves both pack lists, rather
+than at its upload time. An unchanged publication sweeps expired objects;
+without another run they remain stored. A client paused beyond that window
+may need to retry with fresh metadata. Clock rollback delays cleanup.
+Unpublish deliberately removes all project objects immediately, including
+retained packs, and invalidates existing URLs and in-flight fetches.
+
+`bash scripts/e2e.sh` exercises CLI review, committed approval, publication
+against loopback S3, an exact mirror into local R2, public Worker clone and
+pull, browsing/raw/archive routes, unchanged publication, secret rejection
+and CLI unpublish. Its cache regression freezes A's public metadata while
+B and C consolidate and then clones A through public Worker object URLs.
+The synthetic fixture lowers the pack-count threshold to trigger
+consolidation quickly; production keeps its existing threshold.
+No internal storage URL substitutes for a public route. This proves local
+interface compatibility, not hosted R2/Worker consistency or edge behavior.
 
 ## User-run setup
 

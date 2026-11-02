@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -28,6 +30,61 @@ from partlet.store import LocalPathError, LocalStore, Store, StoreError
 # Changing stored page keys must rebuild even when the package version and
 # repository tip are unchanged, and must leave earlier builds immutable.
 SITE_LAYOUT = "directory-children-v1"
+
+# The Worker's mutable Git metadata is fresh for 60 seconds. After it
+# stops advertising a pack, reserve the rest of an hour for an in-flight
+# fetch. The clock starts only when a sweep observes the pack unreferenced.
+PACK_RETENTION_SECONDS = 3600
+
+
+def _pack_retirements(store: Store, prefix: str) -> dict[str, float]:
+    raw = store.get(f"{prefix}/retired-packs.json")
+    try:
+        retired = {} if raw is None else json.loads(raw)
+        if not isinstance(retired, dict) or any(
+            not isinstance(name, str)
+            or isinstance(since, bool)
+            or not isinstance(since, (int, float))
+            or not math.isfinite(since)
+            or since < 0
+            for name, since in retired.items()
+        ):
+            raise ValueError("invalid retirement times")
+    except (ValueError, TypeError, UnicodeError, OverflowError) as exc:
+        raise StoreError("invalid pack retirement state; no packs deleted") from exc
+    return retired
+
+
+def _revive_packs(store: Store, prefix: str, packs: tuple[str, ...]) -> None:
+    """Clear old timers durably before a pointer advertises these packs.
+
+    A failure after advertisement must not leave an old, expired retirement
+    timestamp on a revived pack, even if several subsequent sweeps fail.
+    """
+    retired = _pack_retirements(store, prefix)
+    keys = {f"{prefix}/git/objects/pack/{p}.{ext}" for p in packs for ext in PACK_EXTS}
+    pending = {name: since for name, since in retired.items() if name not in keys}
+    if pending != retired:
+        _put_json(store, f"{prefix}/retired-packs.json", pending)
+
+
+def _sweep_packs(store: Store, prefix: str, keep: set[str]) -> None:
+    """Persist retirement times before deleting any expired pack objects.
+
+    Keeping this outside `current` survives interrupted pointer updates and
+    unchanged retries. Unknown uploads receive the same conservative grace.
+    """
+    retired = _pack_retirements(store, prefix)
+    now = time.time()
+    if not math.isfinite(now) or now < 0:
+        raise StoreError("invalid clock; no packs deleted")
+    candidates = set(store.list(f"{prefix}/git/objects/pack/")) - keep
+    pending = {name: retired.get(name, now) for name in sorted(candidates)}
+    if pending != retired:
+        _put_json(store, f"{prefix}/retired-packs.json", pending)
+    for name, since in pending.items():
+        if now - since >= PACK_RETENTION_SECONDS:
+            store.delete(name)
 
 
 @dataclass(frozen=True)
@@ -63,13 +120,13 @@ def _put_json(store: Store, key: str, value) -> None:
 
 
 def _sweep(store: Store, prefix: str) -> None:
-    """Delete every pack, site build and archive that no pointer names.
+    """Retire packs by age; sweep unreferenced site builds and archives.
 
     Kept: the packs `objects/info/packs` lists, the build and archives
     `current` names, and what was live before the publish that wrote
     `current`, which it records as `previous`; that is the one publish of grace
-    for superseded keys. Anything else was superseded earlier or uploaded by a
-    publish that died before naming it.
+    for superseded keys. Unreferenced packs additionally get at least an
+    hour from their first observed retirement, including orphaned uploads.
     """
     current = _read_json(store, f"{prefix}/current") or {}
     previous = current.get("previous") or {}
@@ -81,7 +138,8 @@ def _sweep(store: Store, prefix: str) -> None:
             builds.append(f"{prefix}/site/{gen['build']}/")
         if gen.get("tip"):
             keep |= {f"{prefix}/archive/{gen['tip']}.{f}" for f in ARCHIVE_FORMATS}
-    for area in ("git/objects/pack/", "site/", "archive/"):
+    _sweep_packs(store, prefix, keep)
+    for area in ("site/", "archive/"):
         for key in store.list(f"{prefix}/{area}"):
             if key not in keep and not key.startswith(tuple(builds)):
                 store.delete(key)
@@ -164,6 +222,7 @@ def publish_project(
 
         # 2. Pointers, so refs never name objects that are not uploaded yet.
         if plan is not None:
+            _revive_packs(store, prefix, plan.packs)
             write_pointers(store, f"{prefix}/git", plan, state)
         _put_json(
             store,

@@ -196,10 +196,12 @@ the publisher rather than by a server-side Git process.
   published tip (`git pack-objects --revs`). Packs are never modified after
   upload, so a `git pull` downloads only new packs.
 - `objects/info/packs`: lists the current packs.
-- Consolidation: when a project has more than 20 packs, the publisher writes
+- Consolidation: when a project already has 20 packs, the publisher writes
   one pack containing everything, updates `objects/info/packs` to list only
-  that pack once `info/refs` has moved, and deletes the superseded packs on
-  the following publish, so clients in the middle of a fetch are not broken.
+  that pack once `info/refs` has moved. Superseded pack/index objects remain
+  while live or previous pointers name them, and for at least an hour from
+  the first sweep observing them unreferenced. This covers 60-second
+  metadata freshness plus 59 minutes of fetch time.
 - After a permitted rewrite, the publisher writes a single full pack and
   treats all earlier packs as superseded.
 
@@ -238,15 +240,18 @@ stable URL.
    `current` file naming the live site build and tip. A publish that drops
    packs (consolidation, rewrite) first lists the old and new packs
    together, and writes the shorter list only after `info/refs` has moved.
-3. Cleanup, per project: delete every pack, site build and archive that
-   neither the pointers nor the previous publish name. `current` records the
-   previous publish's build, tip and packs, so superseded keys get one
-   publish of grace. A run that finds the project unchanged cleans up too.
+3. Cleanup, per project: delete site builds and archives that neither live
+   nor previous pointers name. `current` records the previous publish's
+   build, tip and packs. Unreferenced pack/index objects additionally get
+   at least an hour of timed grace, with retirement times persisted in
+   `retired-packs.json` before deleting expired objects. Revived packs lose
+   their old timers before any pointer advertises them again. An unchanged
+   run cleans up too; orphan uploads receive the same conservative timer.
 4. Site index (`index.html`, `index.json`), once every project is done.
 
 R2 has no multi-object transaction. This order means refs never name an
 object that is missing or in a pack the pack list leaves out. An interrupted
-publish leaves at worst unreferenced keys, which the next run deletes, or a
+publish leaves at worst unreferenced keys, which later runs retire, or a
 pack list naming a pack the refs no longer need, which stays listed until the
 next consolidation or rewrite drops it.
 
@@ -258,6 +263,7 @@ next consolidation or rewrite drops it.
 <source>/lock                               present only while a run holds it
 <source>/p/<name>/current                    JSON: live build id, tip sha, updated time,
                                              previous build, tip and packs
+<source>/p/<name>/retired-packs.json          JSON: unreferenced pack keys and retirement times
 <source>/p/<name>/git/HEAD
 <source>/p/<name>/git/info/refs
 <source>/p/<name>/git/objects/info/packs
@@ -317,8 +323,10 @@ with project contents.
 - Every stable URL, including archives and raw files resolved through
   `current`: `public, max-age=60` with an ETag from R2. Internal build/SHA
   keys have no public route. Errors use `no-store`.
-- One publication of publisher grace does not guarantee uninterrupted
-  fetches across rapid publications or long in-flight requests. See the
+- Packs remain available for at least an hour after the publisher first
+  observes their retirement. Clients must finish within the 60-second
+  metadata freshness plus 59-minute fetch window; explicit unpublish
+  invalidates active fetches. See the
   [Worker retention limit](../../worker/README.md#cache-and-publication-retention-limit).
 
 ### Response safety

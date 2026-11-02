@@ -117,17 +117,22 @@ All stable URLs, including raw files and archives resolved through
 `current`, use `public, max-age=60` and ETags. Errors use `no-store`.
 No Workers Cache API or edge cache rules are configured here.
 
-The publisher keeps superseded objects for one publication, not for a
-fixed duration. If A advertises pack A, B supersedes it and C completes
-within 60 seconds, a client with A's cached refs or pack list can request
-an already-deleted pack and receive an uncached 404. A long in-flight
-fetch can race deletion even with metadata caching disabled. This
-Worker policy does **not** guarantee uninterrupted clone or pull across
-rapid successive publications. Retention covering metadata age plus
-fetch duration, or an equivalent publication snapshot protocol, remains
-an integration requirement. Retrying may read fresh metadata; it is not
-an uninterrupted-fetch guarantee. See the queued retention follow-up in
-[TODO.md](../TODO.md).
+The publisher retains pack/index objects for at least an hour from the
+first sweep that observes them outside both live and previous pack lists.
+Persisted retirement times survive interrupted and unchanged runs. This
+keeps A's advertised objects available when B and C consolidate rapidly,
+covering 60 seconds of metadata freshness plus 59 minutes of fetch time.
+A longer pause may require a fresh fetch; explicit unpublish invalidates
+all project URLs immediately. Site/archive objects retain their existing
+one-publication grace. See the [publisher contract](../docs/PUBLISHING.md)
+for expiry, orphan cleanup and clock behavior.
+
+`bash scripts/e2e.sh` proves the rapid-publication case locally: cache A's
+public metadata, consolidate B and C, then clone A through the Worker's
+public object routes and pull the latest export normally. It also covers
+actual review/publish/unpublish commands against loopback S3, mirrored
+exactly into local R2. Hosted S3/binding coherence, edge caching and browser
+execution remain separate user-run acceptance checks.
 
 ## User-run deployment
 
@@ -156,8 +161,9 @@ These steps belong to the user; local gates never perform them.
    clone and incremental pull on the deployed domain. Verify the serving
    deployment and bucket binding. Local runtime tests and a dry-run
    bundle do not establish hosted behavior, account settings or billing.
-   Avoid cache rules that override the response policy. Resolve the
-   retention limit before promising uninterrupted concurrent fetches.
+   Avoid cache rules that override the response policy. Fetches must
+   finish within the documented retention window; explicit removal
+   invalidates active fetches.
 
 The [Workers Vitest configuration](https://developers.cloudflare.com/workers/testing/vitest-integration/configuration/)
 and [R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)
