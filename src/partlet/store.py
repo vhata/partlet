@@ -38,6 +38,7 @@ class LocalStore:
 
     def __init__(self, root: Path):
         self.root = root
+        self._temporary: set[Path] = set()
 
     def _path(self, key: str) -> Path:
         return self.root.joinpath(*check_key(key).split("/"))
@@ -87,6 +88,8 @@ class LocalStore:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=TMP_PREFIX)
+        temporary = Path(tmp)
+        self._temporary.add(temporary)
         try:
             # mkstemp creates the file 0600; previews must be readable by any
             # static HTTP server, which may run as another user.
@@ -95,8 +98,10 @@ class LocalStore:
                 f.write(data)
             os.replace(tmp, path)
         except BaseException:
-            Path(tmp).unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)
             raise
+        finally:
+            self._temporary.discard(temporary)
 
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
@@ -107,9 +112,15 @@ class LocalStore:
         keys = (
             p.relative_to(self.root).as_posix()
             for p in self.root.rglob("*")
-            if p.is_file() and not p.name.startswith(TMP_PREFIX)
+            if p.is_file() and not self._is_temporary(p)
         )
         return sorted(k for k in keys if k.startswith(prefix))
+
+    def _is_temporary(self, path: Path) -> bool:
+        # samefile handles case and normalization differences in parent paths.
+        # Once replace removes the temporary name, its destination is content.
+        # Abandoned files from earlier processes are listable sweep candidates.
+        return any(tmp.exists() and path.samefile(tmp) for tmp in self._temporary)
 
     def list_dirs(self, prefix: str) -> list[str]:
         if not prefix.endswith("/"):

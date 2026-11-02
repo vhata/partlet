@@ -11,12 +11,3 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 ## P3 Low
 
 ## Unprioritized
-
-- [PUBLISHER] `local-store-list-committed-temp-names` — **List all content.**
-  Files named `.partlet-tmp-*` escape the store listing and remain
-  physically present after their site's grace generation expires.
-  - Source: `review/2026-10-27-1621-full.md`, 2026-10-27
-  - Starting point: `LocalStore.list` and its temporary-file namespace;
-    publish `.partlet-tmp-keep`, advance twice, and verify retired raw and
-    blob objects are physically removed while live/grace objects remain.
-  - Findings: `local-store-temp-prefix-hides-content`

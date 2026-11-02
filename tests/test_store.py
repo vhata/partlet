@@ -94,5 +94,44 @@ def test_put_files_are_readable_by_other_users(tmp_path, monkeypatch):
 
 def test_list_includes_project_files_named_like_temp_files(tmp_path):
     s = LocalStore(tmp_path)
-    s.put("p/site/raw/.tmp-keep", b"x")
-    assert s.list("p/") == ["p/site/raw/.tmp-keep"]
+    keys = [
+        "p/site/raw/.tmp-keep",
+        "p/site/raw/.partlet-tmp-keep",
+        "p/site/blob/.partlet-tmp-keep",
+        "p/site/raw/.partlet-tmp-dir/leaf",
+    ]
+    for key in keys:
+        s.put(key, b"x")
+    assert s.list("p/") == sorted(keys)
+
+
+@pytest.mark.parametrize("parent", ["plain", "É", "E\u0301"])
+@pytest.mark.parametrize("fail", [False, True])
+def test_list_hides_only_active_temporary_file(tmp_path, monkeypatch, parent, fail):
+    s = LocalStore(tmp_path / "out")
+    s.put("é/.partlet-tmp-keep", b"committed")
+    original_replace = store.os.replace
+
+    def replace(src, dst):
+        assert ".partlet-tmp-keep" in " ".join(s.list(""))
+        assert all(".partlet-tmp-" not in k or k.endswith("keep") for k in s.list(""))
+        if fail:
+            raise OSError("interrupted replace")
+        original_replace(src, dst)
+        assert s.get(f"{parent}/new") == b"new"
+        assert any(k.endswith("/new") for k in s.list(""))
+
+    monkeypatch.setattr(store.os, "replace", replace)
+    if fail:
+        with pytest.raises(OSError, match="interrupted"):
+            s.put(f"{parent}/new", b"new")
+    else:
+        s.put(f"{parent}/new", b"new")
+    assert not s._temporary
+    assert len(list(s.root.rglob(".partlet-tmp-*"))) == 1
+
+
+def test_list_includes_abandoned_implementation_temp(tmp_path):
+    s = LocalStore(tmp_path)
+    (tmp_path / ".partlet-tmp-abandoned").write_bytes(b"orphan")
+    assert s.list("") == [".partlet-tmp-abandoned"]
