@@ -371,6 +371,19 @@ class RepoTripwire:
         raise TripwireError("\n".join(parts))
 
 
+# Explicit fake credentials used only against the loopback S3 simulator.
+FAKE_R2_KEY_ID = "partlet-test-key-id"
+FAKE_R2_SECRET = "partlet-test-secret-do-not-print"
+
+
+def mirror_store(store, root: Path) -> None:
+    """Copy the simulated store into a local dumb-HTTP Git server tree."""
+    for key in store.list(""):
+        target = root.joinpath(*key.split("/"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(store.get(key))
+
+
 def export_tip(
     mono: Repo, tmp_path: Path, name: str = "foo", path: str | None = None
 ) -> str:
