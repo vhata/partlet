@@ -24,6 +24,7 @@ Each check is a standalone script in `scripts/` or `docket/scripts/`, runnable f
 | `scripts/worker-test.sh` | Vitest in workerd with simulated R2; empty suite fails | | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/worker-bundle.sh` | Wrangler deploy bundle dry-run; no deployment | | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/worker-smoke.sh` | actual publisher, local R2 and Wrangler clone/pull | | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/e2e.sh` | actual review/publish/unpublish CLI, simulated S3, local R2 and public Worker routes | | | via `e2e` job | via `e2e` job | |
 | `docket/scripts/ci.sh` | queue hygiene, Markdown links, PR markers against the queues | | | yes | yes | |
 | `docket/scripts/check-queues.sh --strict` | queue hygiene | yes | | via `ci.sh` | via `ci.sh` | |
 | `docket/scripts/check-links.sh` | relative Markdown links resolve | yes | | via `ci.sh` | via `ci.sh` | |
@@ -96,6 +97,24 @@ fail if imported. Default Python tests also run the actual prepare and
 publish shell steps, including the R2 backend against loopback S3,
 committed approval, shallow/incorrect branches and consumer concurrency.
 No cloud secrets or deployed Worker are used.
+
+The `Publisher-to-Worker end-to-end` job runs `bash scripts/e2e.sh`
+with the pinned Worker toolchain. Its pytest marker is excluded from the
+default Python suite and selected explicitly by the runner; no tests are
+skipped to pass the feature gate. The scenario covers actual CLI review,
+committed approval, R2 publication against local S3, exact mirroring into
+local R2, public clone/pull, pages/raw/archives, unchanged publication,
+secret rejection and CLI removal. Rapid consolidation keeps an old
+snapshot fetchable while a compliant metadata cache also clones the new
+tip. Clock-controlled tests verify the one-hour retirement expiry,
+interrupted writes, revival and orphan cleanup. See the
+[retention contract](PUBLISHING.md#serialization-and-recovery).
+
+Local S3 and the Worker binding are joined by a test mirror; these checks
+do not establish hosted R2 API/binding coherence. Public URLs always go
+through the Worker. Typescript runtime checks verify content headers and
+bytes; actual browser execution and real private data are user-run proof.
+JavaScript modules (`.mjs`) are tracked for local R2 tooling.
 
 ## Scheduled validation of main
 
