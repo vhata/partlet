@@ -298,6 +298,57 @@ def test_new_commits_publish_and_old_build_is_cleaned_up_one_publish_later(
     assert store.list(f"s/p/foo/site/{build2}/")
 
 
+def test_temp_named_content_is_listed_and_retired_after_grace(mono, tmp_path, first):
+    store, approved = first
+    mono.write("foo/.partlet-tmp-keep", "generation one")
+    mono.write("foo/.partlet-tmp-dir/leaf", "nested one")
+    mono.commit("temporary-looking content")
+    builds = []
+    objects = []
+    for generation in range(3):
+        if generation:
+            mono.write("foo/.partlet-tmp-keep", f"generation {generation + 1}")
+            mono.commit("advance content")
+        assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+        build = json.loads(store.get("s/p/foo/current"))["build"]
+        builds.append(build)
+        prefix = f"s/p/foo/site/{build}"
+        objects.append(
+            {
+                f"{prefix}/{kind}/{name}"
+                for kind in ("raw", "blob")
+                for name in (".partlet-tmp-keep", ".partlet-tmp-dir/leaf")
+            }
+        )
+        listed = set(store.list("s/p/foo/site/"))
+        for live in objects[max(0, generation - 1) :]:
+            assert live <= listed
+            for key in live:
+                assert store.get(key) is not None
+                assert (store.root / key).is_file()
+        assert store.get(f"{prefix}/raw/.partlet-tmp-keep") == (
+            b"generation one"
+            if not generation
+            else f"generation {generation + 1}".encode()
+        )
+        if generation == 1:
+            # Unchanged publication must retain both the live and grace objects.
+            assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
+            assert objects[0] | objects[1] <= set(store.list("s/p/foo/site/"))
+            # Abandoned implementation temps are also sweepable, not hidden.
+            orphan = store.root / (
+                f"s/p/foo/site/{builds[0]}/raw/.partlet-tmp-abandoned"
+            )
+            orphan.write_bytes(b"interrupted write")
+        if generation == 2:
+            assert len(set(builds)) == 3
+            assert objects[0].isdisjoint(listed)
+            for key in objects[0]:
+                assert store.get(key) is None
+                assert not (store.root / key).exists()
+            assert not orphan.exists()
+
+
 def test_description_change_rerenders_without_new_pack(mono, tmp_path, first):
     store, approved = first
     run(mono, tmp_path, store, approved)

@@ -6,6 +6,7 @@ Non-obvious choices and their trade-offs, dated, newest section first. Read the 
 
 | Decision | Reason and trade-off |
 | --- | --- |
+| LocalStore listing hides only temporary files allocated by its active writes, identified by filesystem identity while their temporary names still exist. | A basename prefix also hides committed `.partlet-tmp-*` content from retirement cleanup. Tracking actual allocated files preserves all content names without changing keys, reserving a namespace, requiring a writable parent of the store root, or crossing filesystem boundaries during atomic replacement. After replacement the destination is immediately listable; abandoned temporary files are listable orphan sweep candidates. Publication remains serialized, and active temporary tracking is local to one Store instance. |
 | Before local publication uploads or its unchanged shortcut, probe all rendered site keys in a temporary directory on the output filesystem and reject aliased file or directory identities. | Case and Unicode normalization rules depend on the volume. UTF-8 validation alone cannot stop distinct Git paths from overwriting each other's raw or blob content. Probing every path component also catches aliased directories and file/directory conflicts. Storage keys and the Store protocol stay unchanged for static HTTP and the planned Worker. Cost: render and create empty probe paths even on unchanged builds; names the local filesystem cannot distinguish must be renamed before a local build. |
 
 ## 2026-10-26
