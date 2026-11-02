@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Protocol
 
@@ -21,6 +22,10 @@ class Store(Protocol):
     def list_dirs(self, prefix: str) -> list[str]: ...
 
 
+class LocalPathError(ValueError):
+    """Keys cannot retain their identities on the output filesystem."""
+
+
 def check_key(key: str) -> str:
     parts = key.split("/")
     if not key or key.startswith("/") or any(p in ("", ".", "..") for p in parts):
@@ -36,6 +41,41 @@ class LocalStore:
 
     def _path(self, key: str) -> Path:
         return self.root.joinpath(*check_key(key).split("/"))
+
+    def validate_keys(self, keys: Iterable[str]) -> None:
+        """Probe file and directory identities without uploading any content.
+
+        The probe lives on the output filesystem: case sensitivity and Unicode
+        normalization are filesystem properties, not portable string rules.
+        Publishes into one local directory must be serialized, as for sweeping.
+        """
+        self.root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=self.root) as probe:
+            identities: dict[tuple[int, int], str] = {}
+            for key in keys:
+                parts = check_key(key).split("/")
+                path = Path(probe)
+                for i, part in enumerate(parts):
+                    path /= part
+                    logical = "/".join(parts[: i + 1])
+                    try:
+                        if i < len(parts) - 1:
+                            path.mkdir(exist_ok=True)
+                        else:
+                            path.touch(exist_ok=True)
+                        stat = path.stat()
+                    except OSError as exc:
+                        raise LocalPathError(
+                            f"Store key {key!r} cannot be represented on the local "
+                            "filesystem; rename the Git path before publishing"
+                        ) from exc
+                    identity = (stat.st_dev, stat.st_ino)
+                    previous = identities.setdefault(identity, logical)
+                    if previous != logical or path.is_dir() != (i < len(parts) - 1):
+                        raise LocalPathError(
+                            f"Store paths {previous!r} and {logical!r} alias on the "
+                            "local filesystem; rename the Git paths before publishing"
+                        )
 
     def get(self, key: str) -> bytes | None:
         try:

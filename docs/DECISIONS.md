@@ -2,6 +2,12 @@
 
 Non-obvious choices and their trade-offs, dated, newest section first. Read the relevant entry before changing a mechanism that looks odd. Choices made autonomously under a delegation are recorded here for the user to review; an entry is a record, not a claim that the capability is complete.
 
+## 2026-11-02
+
+| Decision | Reason and trade-off |
+| --- | --- |
+| Before local publication uploads or its unchanged shortcut, probe all rendered site keys in a temporary directory on the output filesystem and reject aliased file or directory identities. | Case and Unicode normalization rules depend on the volume. UTF-8 validation alone cannot stop distinct Git paths from overwriting each other's raw or blob content. Probing every path component also catches aliased directories and file/directory conflicts. Storage keys and the Store protocol stay unchanged for static HTTP and the planned Worker. Cost: render and create empty probe paths even on unchanged builds; names the local filesystem cannot distinguish must be renamed before a local build. |
+
 ## 2026-10-26
 
 | Decision | Reason and trade-off |
