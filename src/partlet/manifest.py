@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import stat
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -53,6 +56,59 @@ def load_manifest(path: Path) -> Manifest:
     except OSError as e:
         raise ManifestError(f"cannot read {path}: {e}") from e
     return parse_manifest(text)
+
+
+def set_project_fields(
+    path: Path,
+    name: str,
+    fields: dict[str, str],
+    *,
+    expected_text: str | None = None,
+) -> None:
+    """Atomically edit a project while preserving TOML comments and layout.
+
+    ``expected_text`` lets an interactive review refuse to approve a manifest
+    that changed while its report or approval question was on screen.
+    """
+    import tomlkit
+
+    tmp: Path | None = None
+    try:
+        original = path.read_bytes().decode("utf-8")
+        if expected_text is not None and original != expected_text:
+            raise ManifestError(
+                "manifest changed during review; run partlet review again"
+            )
+        manifest = parse_manifest(original)
+        if name not in manifest.projects:
+            raise ManifestError(f"project {name!r} is not in {path}")
+        doc = tomlkit.parse(original)
+        table = doc["projects"][name]
+        for key, value in fields.items():
+            if key not in PROJECT_KEYS:
+                raise ManifestError(f"{key!r} is not a project key")
+            if not isinstance(value, str):
+                raise ManifestError(f"{key!r} must be a string")
+            table[key] = value
+        text = tomlkit.dumps(doc)
+        parse_manifest(text)
+        mode = stat.S_IMODE(path.stat().st_mode)
+        fd, tmpname = tempfile.mkstemp(prefix=f".{path.name}.partlet-", dir=path.parent)
+        tmp = Path(tmpname)
+        with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(text.encode("utf-8"))
+        # Recheck after constructing the edit, before replacing the original.
+        if path.read_bytes().decode("utf-8") != original:
+            raise ManifestError(
+                "manifest changed during edit; run partlet review again"
+            )
+        tmp.replace(path)
+    except (OSError, UnicodeError, tomlkit.exceptions.ParseError) as exc:
+        raise ManifestError(f"cannot edit {path}: {exc}") from exc
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 def parse_manifest(text: str) -> Manifest:
