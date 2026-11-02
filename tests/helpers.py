@@ -19,6 +19,23 @@ from partlet.gitutil import git, git_out
 
 EPOCH = 1767225600  # 2026-01-01T00:00:00Z
 
+# Never inherit credentials or tool configuration in synthetic tests.
+CLOUD_PREFIXES = (
+    "AWS_",
+    "R2_",
+    "PARTLET_R2_",
+    "CLOUDFLARE_",
+    "CF_",
+    "WRANGLER_",
+    "GITLEAKS_",
+)
+GITHUB_FILE_VARS = ("GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_PATH")
+SANDBOX_AWS_VARS = (
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_EC2_METADATA_DISABLED",
+)
+
 
 class Repo:
     """A non-bare repository with deterministic commit timestamps."""

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,9 @@ from pathlib import Path
 import helpers
 import pytest
 from helpers import (
+    CLOUD_PREFIXES,
+    GITHUB_FILE_VARS,
+    SANDBOX_AWS_VARS,
     Repo,
     RepoTripwire,
     TripwireError,
@@ -34,6 +38,9 @@ SANDBOX_TESTS = [
     "test_global_git_config_is_the_sandbox_one",
     "test_repository_discovery_cannot_climb_out_of_temp",
     "test_process_cwd_is_not_a_repository",
+    "test_no_cloud_credentials",
+    "test_network_is_loopback_only",
+    "test_no_github_actions_output_files",
 ]
 
 
@@ -87,6 +94,38 @@ def test_process_cwd_is_not_a_repository(tmp_path_factory):
         git("rev-parse", "--git-dir", cwd=Path("."))
 
 
+def test_no_cloud_credentials():
+    assert [
+        k
+        for k in os.environ
+        if k.startswith(CLOUD_PREFIXES) and k not in SANDBOX_AWS_VARS
+    ] == []
+    assert os.environ["AWS_EC2_METADATA_DISABLED"] == "true"
+    for name in ("AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"):
+        path = Path(os.environ[name])
+        assert path.parent.parent == Path(os.environ["HOME"])
+        assert not path.exists()
+
+
+def test_network_is_loopback_only():
+    with pytest.raises(OSError, match="test sandbox"):
+        socket.create_connection(("192.0.2.1", 443), timeout=1)
+    with socket.socket() as sock, pytest.raises(OSError, match="test sandbox"):
+        sock.connect_ex(("192.0.2.1", 443))
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        socket.create_connection(server.getsockname(), timeout=1).close()
+    # AF_INET6 guard is exercised even on hosts without IPv6 loopback enabled.
+    with (
+        socket.socket(socket.AF_INET6) as sock,
+        pytest.raises(OSError, match="test sandbox"),
+    ):
+        sock.connect(("2001:db8::1", 443))
+
+
+def test_no_github_actions_output_files():
+    assert [k for k in GITHUB_FILE_VARS if k in os.environ] == []
+
+
 def test_per_test_chdir_still_works(tmp_path, monkeypatch):
     before = Path.cwd()
     monkeypatch.chdir(tmp_path)
@@ -108,6 +147,10 @@ def test_sandbox_holds_inside_an_enclosing_repository(tmp_path):
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env["GIT_DIR"] = str(tmp_path / "no-such-git-dir")
     env["GIT_WORK_TREE"] = str(tmp_path / "no-such-work-tree")
+    env["AWS_ACCESS_KEY_ID"] = "AKIA-sandbox-test"
+    env["PARTLET_R2_SECRET_ACCESS_KEY"] = "sandbox-test-secret"
+    env["CLOUDFLARE_API_TOKEN"] = "sandbox-test-token"
+    env["GITHUB_STEP_SUMMARY"] = str(tmp_path / "real-summary.md")
     node_ids = [f"tests/test_sandbox.py::{name}" for name in SANDBOX_TESTS]
     proc = subprocess.run(
         [
@@ -127,6 +170,7 @@ def test_sandbox_holds_inside_an_enclosing_repository(tmp_path):
         check=False,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert not (tmp_path / "real-summary.md").exists()
     assert f"{len(SANDBOX_TESTS)} passed" in proc.stdout
     assert [p.read_bytes() for p in watched] == before
 
@@ -163,6 +207,10 @@ def collection_project(tmp_path):
         PARTLET_PROBE_ORIGINAL_XDG=str(original_xdg),
         PARTLET_PROBE_ORIGINAL_CONFIG=str(original_config),
         PARTLET_PROBE_BASETEMP=str(base),
+        AWS_ACCESS_KEY_ID="AKIA-sandbox-test",
+        PARTLET_R2_SECRET_ACCESS_KEY="sandbox-test-secret",
+        GITLEAKS_CONFIG="should-not-be-inherited",
+        GITHUB_STEP_SUMMARY=str(tmp_path / "real-summary.md"),
     )
     probe = tests / "test_collection_probe.py"
     probe.write_text(
@@ -170,9 +218,22 @@ def collection_project(tmp_path):
 import os
 from pathlib import Path
 import subprocess
+import socket
+from helpers import CLOUD_PREFIXES, GITHUB_FILE_VARS, SANDBOX_AWS_VARS
 
 # These checks execute during collection, before any fixture can protect us.
 home = Path(os.environ["HOME"])
+assert not any(k.startswith(CLOUD_PREFIXES) and k not in SANDBOX_AWS_VARS
+               for k in os.environ)
+assert not any(k in os.environ for k in GITHUB_FILE_VARS)
+assert os.environ["AWS_EC2_METADATA_DISABLED"] == "true"
+with socket.socket() as sock:
+    try:
+        sock.connect(("192.0.2.1", 443))
+    except OSError as exc:
+        assert "test sandbox" in str(exc), str(exc)
+    else:
+        raise AssertionError("collection network guard missing")
 assert home != Path(os.environ["PARTLET_PROBE_ORIGINAL_HOME"])
 assert os.environ["XDG_CONFIG_HOME"] != os.environ["PARTLET_PROBE_ORIGINAL_XDG"]
 assert os.environ["GIT_CONFIG_GLOBAL"] == str(home / ".gitconfig")
@@ -208,16 +269,22 @@ import os
 from pathlib import Path
 import sys
 import pytest
+import socket
 
 def watched_env():
     return {key: value for key, value in os.environ.items()
-            if key.startswith("GIT_") or key in {"HOME", "XDG_CONFIG_HOME"}}
+            if key.startswith(("GIT_", "AWS_", "PARTLET_R2_", "GITLEAKS_"))
+            or key in {"HOME", "XDG_CONFIG_HOME", "GITHUB_STEP_SUMMARY"}}
 
 before_env = watched_env()
 before_cwd = Path.cwd()
+before_connect = socket.socket.connect
+before_connect_ex = socket.socket.connect_ex
 result = pytest.main(sys.argv[1:])
 assert Path.cwd() == before_cwd, (Path.cwd(), before_cwd)
 assert watched_env() == before_env, (watched_env(), before_env)
+assert socket.socket.connect is before_connect
+assert socket.socket.connect_ex is before_connect_ex
 print("sandbox lifecycle restored")
 raise SystemExit(result)
 """
