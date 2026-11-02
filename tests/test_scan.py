@@ -227,6 +227,33 @@ def test_monorepo_config_allowlists_paths(mono, tmp_path, gitleaks):
     assert scan(mono, tmp_path, gitleaks) == []
 
 
+def test_monorepo_config_can_extend_a_relative_rules_file(mono, tmp_path, gitleaks):
+    mono.write("foo/token.txt", FAKE_TOKEN + "\n")
+    mono.write(".gitleaks.toml", "[extend]\npath = 'rules/shared.toml'\n")
+    mono.write(
+        "rules/shared.toml",
+        "[[rules]]\nid = 'shared-token'\n"
+        "regex = '''ghp_[0-9A-Za-z]{36}'''\n"
+        "path = '''^foo/token[.]txt$'''\n",
+    )
+    mono.commit("token and configured rules")
+    (finding,) = scan(mono, tmp_path, gitleaks)
+    assert (finding.rule, finding.file) == ("shared-token", "foo/token.txt")
+
+
+def test_inherited_gitleaks_config_cannot_override_monorepo_rules(
+    mono, tmp_path, gitleaks, monkeypatch
+):
+    mono.write("foo/token.txt", FAKE_TOKEN + "\n")
+    mono.commit("token")
+    bogus = tmp_path / "bogus.toml"
+    bogus.write_text("not a valid config")
+    monkeypatch.setenv("GITLEAKS_CONFIG", str(bogus))
+    monkeypatch.setenv("GITLEAKS_CONFIG_TOML", "also not a valid config")
+    (finding,) = scan(mono, tmp_path, gitleaks)
+    assert finding.rule == "github-pat"
+
+
 def test_gitleaksignore_accepts_a_fingerprint(mono, tmp_path, gitleaks):
     mono.write("foo/config.py", f'TOKEN = "{FAKE_TOKEN}"\n')
     mono.commit("c1")

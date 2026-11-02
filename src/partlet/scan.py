@@ -120,7 +120,15 @@ def _gitleaks(
     report.unlink(missing_ok=True)
     try:
         proc = subprocess.run(
-            cmd, cwd=workdir, capture_output=True, text=True, env=_env(), check=False
+            # gitleaks resolves [extend].path relative to cwd. Keep the
+            # monorepo's configuration semantics while repo/report paths are
+            # absolute and all scan output stays in the temporary workdir.
+            cmd,
+            cwd=config_dir,
+            capture_output=True,
+            text=True,
+            env=_env(),
+            check=False,
         )
     except OSError as e:
         raise ScanError(f"cannot run gitleaks: {e}") from e
