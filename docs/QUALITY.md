@@ -40,7 +40,8 @@ Toolchain pins: Python 3.12 (`scripts/setup.sh`); git 2.31 or newer
 2.47.0 exactly (`pyproject.toml`; export hashes depend on it); gitleaks
 8.30.1 exactly, installed by `scripts/install-gitleaks.sh` with a SHA-256
 per platform. Setup runs the installer, so the CI `check` job downloads
-the pinned scanner. Other Python dependencies have floors in `pyproject.toml`.
+the pinned scanner. Other Python dependencies have floors in
+`pyproject.toml`.
 The tool checks record the actual Git version; they do not establish
 identical export hashes across different Git versions. Worker pins: Node
 in `worker/.node-version`; exact npm dependencies and install-script

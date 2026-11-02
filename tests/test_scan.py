@@ -208,6 +208,16 @@ def test_users_git_config_does_not_change_reported_paths(
     assert [f.file for f in scan(mono, tmp_path, gitleaks)] == ["a/x.txt"]
 
 
+@pytest.mark.parametrize(
+    "name", ["foo/a b.txt", "foo/é.txt", 'foo/a"b.txt', "foo/a\tb.txt"]
+)
+def test_git_quoted_names_keep_canonical_paths(mono, tmp_path, gitleaks, name):
+    mono.write(name, FAKE_TOKEN + "\n")
+    mono.commit("secret in a Git-quoted path")
+    (finding,) = scan(mono, tmp_path, gitleaks)
+    assert finding.file == name
+
+
 def test_report_is_redacted(mono, tmp_path, gitleaks):
     mono.write("foo/config.py", f'TOKEN = "{FAKE_TOKEN}"\n')
     mono.commit("add token")
