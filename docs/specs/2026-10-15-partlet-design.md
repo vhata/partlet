@@ -356,6 +356,15 @@ Run locally from a monorepo checkout: `partlet review <name>`.
 `--allow-rewrite` additionally writes `allow_rewrite_of = "<current published
 tip>"`.
 
+Review reads the published tip from `<base_url>/<name>/info/refs`, so it
+needs no R2 credentials. `--published-tip <sha>` supplies the tip when the
+site cannot be reached; `--published-tip none` explicitly identifies a
+first publication. Findings prevent approval. A non-fast-forward export
+also prevents approval unless `--allow-rewrite` is supplied, and that flag
+still requires a yes answer to the approval question. Declining keeps the
+manifest unchanged. Approved edits preserve its comments and formatting;
+changing the manifest while answering requires a fresh review.
+
 ### Author metadata
 
 The optional site-level `mailmap` is applied by filter-repo during export. It
