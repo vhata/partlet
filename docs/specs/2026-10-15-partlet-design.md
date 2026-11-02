@@ -308,10 +308,14 @@ with project contents.
 
 ### Caching
 
-- Packs, archive files by SHA, and anything under a build prefix: `public,
-  max-age=31536000, immutable`.
-- `HEAD`, `info/refs`, `objects/info/packs`, and pages served at stable URLs:
-  `max-age=60` with an ETag from R2.
+- Content-addressed pack and index URLs: `public, max-age=31536000,
+  immutable`.
+- Every stable URL, including archives and raw files resolved through
+  `current`: `public, max-age=60` with an ETag from R2. Internal build/SHA
+  keys have no public route. Errors use `no-store`.
+- One publication of publisher grace does not guarantee uninterrupted
+  fetches across rapid publications or long in-flight requests. See the
+  [Worker retention limit](../../worker/README.md#cache-and-publication-retention-limit).
 
 ### Response safety
 

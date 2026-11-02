@@ -1,0 +1,20 @@
+# Partlet Worker: serves one source's published projects from R2, read-only.
+# The user deploys it (npx wrangler deploy, from this directory) after
+# replacing the three replace-me values; see worker/README.md. Agents never
+# deploy it or provision the bucket, Worker or domain.
+name = "partlet"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Key prefix in the bucket: the `[site] source` value in the monorepo's
+# partlet.toml.
+SOURCE = "replace-me"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "replace-me"
+
+[[routes]]
+pattern = "partlet.replace-me.example"
+custom_domain = true
