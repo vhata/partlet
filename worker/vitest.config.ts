@@ -6,7 +6,7 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: "./wrangler.toml" },
       // Tests use their own source prefix, never the deploy placeholder.
-      miniflare: { bindings: { SOURCE: "test" } },
+      miniflare: { bindings: { SOURCE: "test" }, cf: false },
     }),
   ],
 });

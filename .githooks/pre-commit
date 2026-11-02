@@ -6,5 +6,6 @@ cd "$(git rev-parse --show-toplevel)"
 
 bash scripts/fmt-check.sh
 bash scripts/lint.sh
+bash scripts/worker-lint.sh
 bash docket/scripts/check-queues.sh --strict
 bash docket/scripts/check-links.sh

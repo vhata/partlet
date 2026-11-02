@@ -4,8 +4,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Miniflare } from "miniflare";
 
-const [directory, persistence] = process.argv.slice(2);
-if (!directory || !persistence) throw new Error("usage: seed-r2.mjs OUTPUT PERSISTENCE");
+const [directory, persistence, bucketName = "replace-me"] = process.argv.slice(2);
+if (!directory || !persistence)
+  throw new Error("usage: seed-r2.mjs OUTPUT PERSISTENCE [BUCKET_NAME]");
 const mf = new Miniflare({
   // Wrangler's pinned Miniflare 5 stores resources below <persist>/v3.
   // Use its current config/manifest API instead of the old script/r2Persist
@@ -27,7 +28,7 @@ const mf = new Miniflare({
             },
           },
         },
-        env: { BUCKET: { type: "r2", name: "replace-me", dev: { remote: false } } },
+        env: { BUCKET: { type: "r2", name: bucketName, dev: { remote: false } } },
       },
     },
   ],

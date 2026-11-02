@@ -19,16 +19,30 @@ Each check is a standalone script in `scripts/` or `docket/scripts/`, runnable f
 | `scripts/fmt-check.sh` | `ruff format --check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/lint.sh` | shellcheck over `scripts/*.sh` and `.githooks/*`, then `ruff check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/test.sh` | pytest; fails on an empty collection | | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/worker-lint.sh` | Biome format/lint and smoke-driver Ruff | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/worker-typecheck.sh` | generated Wrangler types, source and test TypeScript | | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/worker-test.sh` | Vitest in workerd with simulated R2; empty suite fails | | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/worker-bundle.sh` | Wrangler deploy bundle dry-run; no deployment | | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/worker-smoke.sh` | actual publisher, local R2 and Wrangler clone/pull | | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `docket/scripts/ci.sh` | queue hygiene, Markdown links, PR markers against the queues | | | yes | yes | |
 | `docket/scripts/check-queues.sh --strict` | queue hygiene | yes | | via `ci.sh` | via `ci.sh` | |
 | `docket/scripts/check-links.sh` | relative Markdown links resolve | yes | | via `ci.sh` | via `ci.sh` | |
-| `scripts/check.sh` | the gates in its `gates` array, in order: `fmt-check`, `lint`, `test` | | yes | yes | yes | |
+| `scripts/check.sh` | all gates in its `gates` array, cheapest first | | yes | yes | yes | |
 
-`scripts/check.sh` is the composite entry point: `ci.yml` runs it rather than the gates individually. There is no Worker code yet, so it has no gates; they join `scripts/check.sh`, `ci.yml` and this table in the PR that adds the Worker.
+`scripts/check.sh` is the composite entry point: `ci.yml` runs it rather
+than the gates individually. Worker runtime tests and the smoke check
+use local simulated bindings only; no cloud account is required.
 
 Hooks are a tracked `.githooks/` directory, wired with `git config core.hooksPath .githooks` by `bash scripts/setup.sh`. Pre-commit runs the format check, lint and the queue and link validators on the whole working tree; it only checks and never rewrites files. Pre-push runs `bash scripts/check.sh`, including the test suite. Bypassing a hook is for a broken toolchain only; state the bypass and the equivalent checks in the PR.
 
-Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in `pyproject.toml`; git 2.31 or newer (`rev-parse --path-format`). Bumping a pin is its own PR.
+Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in
+`pyproject.toml`; git 2.31 or newer (`rev-parse --path-format`); Node in
+`worker/.node-version`; exact npm dependencies and install-script
+allowlist in `worker/package.json`, resolved by its committed lockfile;
+Workers compatibility date in `worker/wrangler.toml`. Setup requires
+npm >=11.19 to enforce the allowlist and uses `npm ci`. Bumping a pin is
+its own PR. See the [Worker guide](../worker/README.md) for individual
+gates, local preview and the cache/retention evidence limit.
 
 ## Test policy
 

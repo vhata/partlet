@@ -3,6 +3,9 @@
 Publish selected directories of a private Git monorepo as public, read-only
 Git repositories.
 
+See the [Worker guide](worker/README.md) for local development, synthetic
+clone/pull validation and user-run deployment instructions.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

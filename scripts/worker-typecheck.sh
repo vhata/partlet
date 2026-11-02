@@ -4,7 +4,9 @@
 # exports; regenerate it with: (cd worker && npm run types)
 set -euo pipefail
 cd "$(dirname "$0")/../worker"
-export WRANGLER_SEND_METRICS=false
+export WRANGLER_SEND_METRICS=false CLOUDFLARE_CF_FETCH_ENABLED=false
+unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_KEY CLOUDFLARE_EMAIL
+unset CF_API_TOKEN CF_ACCOUNT_ID CF_API_KEY CF_EMAIL
 
 [ -x node_modules/.bin/tsc ] || { echo "worker-typecheck: run bash scripts/setup.sh first" >&2; exit 1; }
 node_modules/.bin/wrangler types --strict-vars=false --check
