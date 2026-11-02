@@ -92,17 +92,24 @@ virtualenv. The Worker is TypeScript, built and deployed with wrangler.
    ```
 
 2. `.github/workflows/partlet.yml`: triggers on push to the publishing branch
-   and on `workflow_dispatch`; checks out with `fetch-depth: 0`; declares
-   `concurrency: { group: partlet, cancel-in-progress: false }`; runs
-   `uses: <owner>/partlet@v1` with R2 credentials from secrets.
+   and on `workflow_dispatch`; uses `ubuntu-24.04`; checks out with
+   `fetch-depth: 0` and `persist-credentials: false`; declares a per-source
+   `concurrency` group with `cancel-in-progress: false`; and selects Partlet
+   by a reviewed release commit SHA. Credentials reach only its publication
+   step through environment variables. The [consumer setup](../../README.md)
+   provides the complete workflow and user-run release instructions.
 
 3. Secrets: `PARTLET_R2_ACCOUNT_ID`, `PARTLET_R2_ACCESS_KEY_ID`,
    `PARTLET_R2_SECRET_ACCESS_KEY` and `PARTLET_R2_BUCKET`. The token is
    scoped to read and write the one bucket.
 
-The composite action installs Python, installs Partlet from the action's own
-checkout (so the version is pinned by the action ref), installs
-`git-filter-repo` and a pinned gitleaks release, and runs `partlet publish`.
+The composite action installs Python and hash-locked dependency wheels,
+including exactly pinned `git-filter-repo`, and verifies downloaded tool
+checksums. An isolated launcher loads Partlet from the Action's own pinned
+checkout, without importing the private source checkout. A missing local
+publishing branch is restored from its remote-tracking branch. Shallow
+history, a mismatched HEAD and an uncommitted approval manifest are refused
+before publication. The source checkout receives no package installation.
 
 ## Manifest rules
 
@@ -320,13 +327,17 @@ with project contents.
 
 - Content-addressed pack and index URLs: `public, max-age=31536000,
   immutable`.
-- Every stable URL, including archives and raw files resolved through
+- Mutable Git `HEAD`, `info/refs` and `objects/info/packs`: `no-store`.
+  Independent cache ages must not combine fresh refs with old pack lists.
+- Stable site URLs, including archives and raw files resolved through
   `current`: `public, max-age=60` with an ETag from R2. Internal build/SHA
   keys have no public route. Errors use `no-store`.
 - Packs remain available for at least an hour after the publisher first
   observes their retirement. Clients must finish within the 60-second
-  metadata freshness plus 59-minute fetch window; explicit unpublish
-  invalidates active fetches. See the
+  legacy metadata freshness plus 59-minute fetch window; explicit unpublish
+  invalidates active fetches and approved rewrites change the snapshot.
+  Upgrade the Worker and let previous 60-second cache entries expire before
+  a rapid publish. See the
   [Worker retention limit](../../worker/README.md#cache-and-publication-retention-limit).
 
 ### Response safety

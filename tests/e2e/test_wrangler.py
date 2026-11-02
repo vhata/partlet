@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -192,13 +192,17 @@ class Runtime:
 
 
 @contextmanager
-def cached_metadata_proxy(upstream, cached):
-    """Freeze public Git metadata; all object requests still use the Worker."""
+def cached_metadata_proxy(upstream, cached, respect_cache=False):
+    """Model captured metadata or a cache obeying the Worker's response policy."""
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlsplit(self.path).path
-            status, headers, data = cached.get(path) or request(upstream + self.path)
+            response = cached.get(path) or request(upstream + self.path)
+            status, headers, data = response
+            policy = headers.get("Cache-Control", "")
+            if respect_cache and "max-age=" in policy and "no-store" not in policy:
+                cached[path] = response
             self.send_response(status)
             for key in ("Content-Type", "Cache-Control"):
                 if key in headers:
@@ -222,8 +226,17 @@ def cached_metadata_proxy(upstream, cached):
         assert not thread.is_alive()
 
 
-def test_review_publish_clone_rapid_updates_and_unpublish(mono, tmp_path, r2_config):
-    runtime = Runtime(tmp_path, r2_config)
+@pytest.fixture
+def runtime(tmp_path, r2_config):
+    with ExitStack() as services:
+        runtime = Runtime(tmp_path, r2_config)
+        runtime.services = services
+        yield runtime
+
+
+def test_review_publish_clone_rapid_updates_and_unpublish(
+    mono, tmp_path, r2_config, runtime
+):
     store = R2Store(r2_config)
     mono.write("foo/README.md", "# Synthetic public project\n")
     mono.write("foo/src/a.py", "print('first')\n")
@@ -277,15 +290,19 @@ def test_review_publish_clone_rapid_updates_and_unpublish(mono, tmp_path, r2_con
             for path in ("/foo/HEAD", "/foo/info/refs", "/foo/objects/info/packs")
         }
         assert cached["/foo/objects/info/packs"][2] == first_packs
-        assert (
-            cached["/foo/objects/info/packs"][1]["Cache-Control"]
-            == "public, max-age=60"
+        assert cached["/foo/objects/info/packs"][1]["Cache-Control"] == "no-store"
+        # Warm only the old pack list in a compliant HTTP cache. The next
+        # refs request will be fresh: caching the list could pair refs C
+        # with packs A that cannot contain C, even if all packs are retained.
+        cache_proxy = runtime.services.enter_context(
+            cached_metadata_proxy(base, {}, respect_cache=True)
         )
+        assert request(cache_proxy + "/foo/objects/info/packs")[2] == first_packs
+        captured_at = time.monotonic()
         runtime.run("git", "clone", "-q", base + "/foo", str(clone))
         runtime.run("git", "clone", "-q", base + "/foo.git", str(tmp_path / "alias"))
     assert runtime.run("git", "rev-parse", "HEAD", cwd=clone).strip() == first["tip"]
 
-    started = time.monotonic()
     mono.write("foo/src/a.py", "print('incremental')\n")
     mono.commit("incremental public update")
     assert "published" in runtime.cli("publish", "--repo", mono.path)
@@ -306,7 +323,7 @@ def test_review_publish_clone_rapid_updates_and_unpublish(mono, tmp_path, r2_con
         assert "published" in runtime.cli(
             "publish", "--repo", mono.path, consolidate=True
         )
-    assert time.monotonic() - started < 60, (
+    assert time.monotonic() - captured_at < 60, (
         "rapid publications exceeded metadata freshness"
     )
     latest = json.loads(store.get("e2e/p/foo/current"))
@@ -314,6 +331,12 @@ def test_review_publish_clone_rapid_updates_and_unpublish(mono, tmp_path, r2_con
     assert retired, "A's pack must have left both current and previous pack sets"
     runtime.seed(store)
     with runtime.worker() as base:
+        mixed_clone = tmp_path / "mixed-cache-clone"
+        runtime.run("git", "clone", "-q", cache_proxy + "/foo", str(mixed_clone))
+        assert (
+            runtime.run("git", "rev-parse", "HEAD", cwd=mixed_clone).strip()
+            == latest["tip"]
+        )
         # A's cached metadata still produces a complete, ordinary clone
         # after B and C have consolidated away its pack from their lists.
         for line in first_packs.decode().splitlines():

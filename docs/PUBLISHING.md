@@ -125,20 +125,34 @@ recovery. Unpublish removes `current` and refreshes the site index before
 retiring the remaining project objects; retrying finishes a partial
 unpublish. No automatic CI unpublish feature is provided.
 
-The one-hour pack window covers the Worker's 60-second metadata freshness
-plus up to 59 minutes for a client to finish fetching advertised objects.
+Mutable Git metadata (`HEAD`, `info/refs`, `objects/info/packs`) uses
+`no-store`: independent cache ages must not combine a fresh tip with an
+older pack list that cannot contain it. Retention additionally protects
+in-flight fetches and legacy metadata cached under the former policy.
+The one-hour pack window covers that former 60-second freshness plus up
+to 59 minutes for a client to finish fetching advertised objects.
 It starts conservatively after an object leaves both pack lists, rather
 than at its upload time. An unchanged publication sweeps expired objects;
 without another run they remain stored. A client paused beyond that window
 may need to retry with fresh metadata. Clock rollback delays cleanup.
 Unpublish deliberately removes all project objects immediately, including
-retained packs, and invalidates existing URLs and in-flight fetches.
+retained packs, and invalidates existing URLs and in-flight fetches. An
+explicitly approved history rewrite also changes the advertised snapshot;
+clients racing it may need to fetch again from fresh metadata.
+
+When upgrading an existing deployment, deploy the Worker with `no-store`
+first and let all previously served 60-second metadata entries expire
+before the first rapid publication. Do not override these headers with
+edge cache rules. Local checks cannot establish the deployed policy.
 
 `bash scripts/e2e.sh` exercises CLI review, committed approval, publication
 against loopback S3, an exact mirror into local R2, public Worker clone and
 pull, browsing/raw/archive routes, unchanged publication, secret rejection
 and CLI unpublish. Its cache regression freezes A's public metadata while
 B and C consolidate and then clones A through public Worker object URLs.
+An additional cache obeys the actual response headers: warm only A's
+pack list, then clone the latest refs after consolidation. `no-store`
+prevents that cache from mixing fresh refs with a stale pack list.
 The synthetic fixture lowers the pack-count threshold to trigger
 consolidation quickly; production keeps its existing threshold.
 No internal storage URL substitutes for a public route. This proves local

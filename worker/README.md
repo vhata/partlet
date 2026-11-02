@@ -113,26 +113,37 @@ include bucket keys or provider exception details.
 ## Cache and publication retention limit
 
 Only content-addressed packs and indexes are immutable for one year.
-All stable URLs, including raw files and archives resolved through
-`current`, use `public, max-age=60` and ETags. Errors use `no-store`.
+Mutable Git metadata (`HEAD`, `info/refs`, `objects/info/packs`) uses
+`no-store` so independent cache ages cannot pair new refs with a pack list
+that lacks their objects. Stable site URLs, including raw files and
+archives resolved through `current`, use `public, max-age=60` and ETags.
+Errors use `no-store`.
 No Workers Cache API or edge cache rules are configured here.
 
 The publisher retains pack/index objects for at least an hour from the
 first sweep that observes them outside both live and previous pack lists.
 Persisted retirement times survive interrupted and unchanged runs. This
 keeps A's advertised objects available when B and C consolidate rapidly,
-covering 60 seconds of metadata freshness plus 59 minutes of fetch time.
+covering legacy 60-second metadata freshness plus 59 minutes of fetch time.
 A longer pause may require a fresh fetch; explicit unpublish invalidates
-all project URLs immediately. Site/archive objects retain their existing
+all project URLs immediately. Explicitly approved rewrites change the
+advertised snapshot and clients racing them may need a fresh fetch.
+Site/archive objects retain their existing
 one-publication grace. See the [publisher contract](../docs/PUBLISHING.md)
 for expiry, orphan cleanup and clock behavior.
 
 `bash scripts/e2e.sh` proves the rapid-publication case locally: cache A's
 public metadata, consolidate B and C, then clone A through the Worker's
-public object routes and pull the latest export normally. It also covers
+public object routes and pull the latest export normally. A cache that
+obeys response headers separately verifies a fresh clone cannot combine
+the old pack list with new refs. It also covers
 actual review/publish/unpublish commands against loopback S3, mirrored
 exactly into local R2. Hosted S3/binding coherence, edge caching and browser
 execution remain separate user-run acceptance checks.
+
+For an existing deployment, deploy the new Worker first and wait for all
+old 60-second Git metadata cache entries to expire before a rapid publish.
+`no-store` cannot invalidate entries already served by the old Worker.
 
 ## User-run deployment
 

@@ -254,7 +254,10 @@ async function handle(request: Request, env: Env, route: Route): Promise<Respons
         const type = route.path.endsWith(".pack") ? GIT_TYPES.pack : GIT_TYPES.idx;
         return servePack(request, env, key, baseHeaders(type, FILE_CSP, CACHE_IMMUTABLE));
       }
-      return serveObject(request, env, key, baseHeaders(TEXT, FILE_CSP, CACHE_REVALIDATE));
+      // Independent freshness of refs and pack lists can pair a new tip
+      // with an old list that lacks its objects. Always read mutable Git
+      // metadata fresh; pack retention separately protects in-flight reads.
+      return serveObject(request, env, key, baseHeaders(TEXT, FILE_CSP, CACHE_NONE));
     }
     default:
       return serveProjectFile(request, env, route);

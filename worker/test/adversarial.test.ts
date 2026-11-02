@@ -324,11 +324,11 @@ describe("cache and out-of-policy deletion boundary", () => {
     await put(`p/${project}/git/objects/pack/${firstPack}.pack`, "first pack");
     await put(`p/${project}/git/objects/info/packs`, `P ${firstPack}.pack\n\n`);
     const metadata = await get(`/${project}/objects/info/packs`);
-    expect(metadata.headers.get("Cache-Control")).toBe("public, max-age=60");
+    expect(metadata.headers.get("Cache-Control")).toBe("no-store");
     const cachedList = await text(metadata);
 
-    // Reproduce the historical one-publication-only policy by deleting A
-    // explicitly while metadata is still fresh. The publisher now retains
+    // Reproduce a paused fetch under the historical one-publication policy
+    // by deleting A explicitly after the client read its metadata. The publisher now retains
     // retired packs for an hour; tests/e2e/test_wrangler.py exercises that
     // protection through actual publication and public Worker object URLs.
     // The Worker must still fail safely after out-of-policy deletion.

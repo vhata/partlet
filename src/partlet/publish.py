@@ -31,9 +31,9 @@ from partlet.store import LocalPathError, LocalStore, Store, StoreError
 # repository tip are unchanged, and must leave earlier builds immutable.
 SITE_LAYOUT = "directory-children-v1"
 
-# The Worker's mutable Git metadata is fresh for 60 seconds. After it
-# stops advertising a pack, reserve the rest of an hour for an in-flight
-# fetch. The clock starts only when a sweep observes the pack unreferenced.
+# Mutable Git metadata now uses no-store. Legacy metadata may remain fresh
+# for 60 seconds; reserve the rest of an hour for an in-flight fetch. The
+# clock starts only when a sweep observes the pack unreferenced.
 PACK_RETENTION_SECONDS = 3600
 
 

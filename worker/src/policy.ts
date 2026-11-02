@@ -3,8 +3,8 @@
 
 // Packs are content-addressed and never rewritten.
 export const CACHE_IMMUTABLE = "public, max-age=31536000, immutable";
-// Everything at a stable URL, including pages, raw files and archives whose
-// stored key is resolved through the project's `current` file.
+// Site URLs, including pages, raw files and archives whose stored key is
+// resolved through `current`. Mutable Git metadata instead uses CACHE_NONE.
 export const CACHE_REVALIDATE = "public, max-age=60";
 export const CACHE_NONE = "no-store";
 

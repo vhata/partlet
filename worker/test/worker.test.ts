@@ -142,7 +142,7 @@ describe("git dumb HTTP", () => {
     const res = await get("/foo/info/refs?service=git-upload-pack");
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
-    expect(res.headers.get("Cache-Control")).toBe("public, max-age=60");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(await text(res)).toBe(`${TIP}\trefs/heads/main\n`);
   });
 
@@ -160,9 +160,9 @@ describe("git dumb HTTP", () => {
   it.each([
     ["/foo/HEAD", "ref: refs/heads/main\n"],
     ["/foo/objects/info/packs", `P ${PACK}.pack\n\n`],
-  ])("serves %s with a short cache", async (path, body) => {
+  ])("serves %s without caching", async (path, body) => {
     const res = await get(path);
-    expect(res.headers.get("Cache-Control")).toBe("public, max-age=60");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
     expect(await text(res)).toBe(body);
   });
