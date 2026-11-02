@@ -56,7 +56,8 @@ partlet/
     manifest.py      load and validate partlet.toml
     export.py        filter-repo extraction into a bare repository
     history.py       approval pin and fast-forward checks
-    scan.py          gitleaks wrapper
+    scan.py          gitleaks wrapper: full-history scan, pinned version check
+    tools.py         export/scanner pins, minimum Git version, actual versions
     gitstatic.py     prepare dumb-HTTP files (refs, packs, info files)
     archive.py       deterministic .tar.gz / .zip via git archive
     site/            renderer: Jinja2 templates, markdown-it-py, Pygments
@@ -175,8 +176,9 @@ The previously published tip is read back from R2 (the project's published
 
 ## Secret scanning
 
-- In CI, gitleaks scans only the commits being added: `published..new`, or
-  `approved..new` on first publication. A finding fails that project.
+- In CI, gitleaks scans the full reachable history of each export before
+  anything is uploaded; a finding fails that project and nothing of it is
+  written.
 - The full history up to `approved` is scanned locally during `partlet review`.
 - gitleaks configuration: if the monorepo has a `.gitleaks.toml` at its root,
   it is used; otherwise gitleaks defaults apply.
