@@ -35,9 +35,16 @@ use local simulated bindings only; no cloud account is required.
 
 Hooks are a tracked `.githooks/` directory, wired with `git config core.hooksPath .githooks` by `bash scripts/setup.sh`. Pre-commit runs the format check, lint and the queue and link validators on the whole working tree; it only checks and never rewrites files. Pre-push runs `bash scripts/check.sh`, including the test suite. Bypassing a hook is for a broken toolchain only; state the bypass and the equivalent checks in the PR.
 
-Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in
-`pyproject.toml`; git 2.31 or newer (`rev-parse --path-format`); Node in
-`worker/.node-version`; exact npm dependencies and install-script
+Toolchain pins: Python 3.12 (`scripts/setup.sh`); git 2.31 or newer
+(`rev-parse --path-format` and first-parent merge diffs); git-filter-repo
+2.47.0 exactly (`pyproject.toml`; export hashes depend on it); gitleaks
+8.30.1 exactly, installed by `scripts/install-gitleaks.sh` with a SHA-256
+per platform. Setup runs the installer, so the CI `check` job downloads
+the pinned scanner. Other Python dependencies have floors in
+`pyproject.toml`.
+The tool checks record the actual Git version; they do not establish
+identical export hashes across different Git versions. Worker pins: Node
+in `worker/.node-version`; exact npm dependencies and install-script
 allowlist in `worker/package.json`, resolved by its committed lockfile;
 Workers compatibility date in `worker/wrangler.toml`. Setup requires
 npm >=11.19 to enforce the allowlist and uses `npm ci`. Bumping a pin is
@@ -50,6 +57,16 @@ gates, local preview and the cache/retention evidence limit.
 - Documentation-only changes need no new tests; `docket/scripts/check-links.sh` covers their links.
 - An empty or skipped suite is a failed gate.
 - Tests run git in a sandbox: `tests/conftest.py` removes inherited `GIT_*` variables when it is imported. At session start, before test modules are collected, it arms the tripwire, points `HOME` and the global git config at a temporary directory, moves the process into a directory under pytest's base temp, and sets `GIT_CEILING_DIRECTORIES` so implicit repository discovery cannot leave the temporary area. The tripwire fails the run, with a diff and a backup to compare against, if this repository's git config, `HEAD`, branch refs (including the main checkout's `HEAD` and `main`), the worktree's `.git` file, or the user's global git config change during the run. Configuration cleanup restores the original environment and working directory, including after collect-only runs and collection errors. `scripts/test.sh` also unsets git's repository variables before starting pytest.
+- Before collection, the sandbox also removes `AWS_*`, `R2_*`,
+  `PARTLET_R2_*`, `CLOUDFLARE_*`, `CF_*`, `WRANGLER_*` and `GITLEAKS_*`
+  variables, points the AWS SDK at missing config files, disables its
+  instance metadata lookup, and lets Python sockets connect to loopback
+  addresses only. DNS lookups, UDP and subprocess sockets are not blocked;
+  child processes inherit the stripped environment and tests point them
+  only at local paths or simulated loopback services. The sandbox also
+  unsets `GITHUB_STEP_SUMMARY`, `GITHUB_OUTPUT`, `GITHUB_ENV` and
+  `GITHUB_PATH`. Environment, sockets and working directory are restored
+  when pytest exits, including after collection errors.
 - No automatic retries. A flaky test is filed in `TODO.md` with its evidence and fixed or quarantined by name.
 
 ## Review inputs

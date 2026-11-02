@@ -12,6 +12,9 @@ command -v uv >/dev/null || { echo "setup: uv is required (https://docs.astral.s
 [ -d .venv ] || uv venv --quiet --python 3.12 .venv
 uv pip install --quiet --python .venv/bin/python -e '.[dev]'
 
+# The scanner version and release archive checksums are pinned together.
+bash scripts/install-gitleaks.sh .venv/bin
+
 # npm older than 11.19 silently ignores the dependency install allowlist.
 command -v node >/dev/null || { echo "setup: Node is required; see worker/.node-version" >&2; exit 1; }
 command -v npm >/dev/null || { echo "setup: npm >=11.19 is required" >&2; exit 1; }

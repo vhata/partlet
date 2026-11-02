@@ -2,23 +2,31 @@
 
 Three layers, earliest first:
 
-1. At import, inherited `GIT_*` variables are removed from the process.
+1. At import, inherited Git/tool configuration, cloud credentials and GitHub
+   output file variables are removed from the process.
 2. `pytest_sessionstart` arms a tripwire on this project's own repository and
    the user's git config before entering the sandbox.
 3. Before collection, the same hook moves HOME, the global git config and
    the working directory into pytest's temporary area, and sets
-   GIT_CEILING_DIRECTORIES so repository discovery cannot leave it.
+   GIT_CEILING_DIRECTORIES so repository discovery cannot leave it. It also
+   points AWS at missing config files and guards TCP connections before
+   collection, allowing loopback only. DNS, UDP and child processes are not
+   covered by the Python socket guard.
 
 `pytest_sessionfinish` fails the run if watched state changed. Configuration
 cleanup restores the original environment and working directory, including
 for collect-only runs and collection errors.
 """
 
+import ipaddress
 import os
+import socket
 from pathlib import Path
 
 import pytest
 from helpers import (
+    CLOUD_PREFIXES,
+    GITHUB_FILE_VARS,
     Repo,
     RepoTripwire,
     TripwireError,
@@ -32,8 +40,10 @@ from helpers import (
 _ORIGINAL_ENV = dict(os.environ)
 _sandbox = pytest.MonkeyPatch()
 
-for _name in [k for k in os.environ if k.startswith("GIT_")]:
+for _name in [k for k in os.environ if k.startswith(("GIT_", *CLOUD_PREFIXES))]:
     _sandbox.delenv(_name)
+for _name in GITHUB_FILE_VARS:
+    _sandbox.delenv(_name, raising=False)
 
 _GITCONFIG = """\
 [user]
@@ -102,6 +112,29 @@ def _ceiling_dirs(base: Path) -> str:
     return ":".join(dict.fromkeys(forms))
 
 
+class NetworkBlocked(OSError):
+    """A test tried to connect to a non-loopback address."""
+
+
+def _is_loopback(host: str) -> bool:
+    # Numeric addresses only: trusting a hostname would depend on DNS.
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def _guard(real):
+    def connect(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6) and not _is_loopback(
+            str(address[0])
+        ):
+            raise NetworkBlocked(f"test sandbox: connection to {address[0]} blocked")
+        return real(sock, address)
+
+    return connect
+
+
 def _git_sandbox(tmp_path_factory):
     """Isolate Git before pytest imports test modules, without needing a fixture."""
     base = tmp_path_factory.getbasetemp()
@@ -111,13 +144,18 @@ def _git_sandbox(tmp_path_factory):
     gitconfig.write_text(_GITCONFIG)
     cwd = base / "cwd"
     cwd.mkdir()
-    for name in [k for k in os.environ if k.startswith("GIT_")]:
+    for name in [k for k in os.environ if k.startswith(("GIT_", *CLOUD_PREFIXES))]:
         _sandbox.delenv(name)
     _sandbox.setenv("HOME", str(home))
     _sandbox.setenv("XDG_CONFIG_HOME", str(home / ".config"))
     _sandbox.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
     _sandbox.setenv("GIT_CONFIG_NOSYSTEM", "1")
     _sandbox.setenv("GIT_CEILING_DIRECTORIES", _ceiling_dirs(base))
+    _sandbox.setenv("AWS_CONFIG_FILE", str(home / ".aws" / "config"))
+    _sandbox.setenv("AWS_SHARED_CREDENTIALS_FILE", str(home / ".aws" / "credentials"))
+    _sandbox.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    _sandbox.setattr(socket.socket, "connect", _guard(socket.socket.connect))
+    _sandbox.setattr(socket.socket, "connect_ex", _guard(socket.socket.connect_ex))
     # Relative paths and Path.cwd() must not lead back to the real checkout.
     _sandbox.chdir(cwd)
 

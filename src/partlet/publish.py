@@ -15,6 +15,7 @@ from partlet.gitstatic import PACK_EXTS, read_state, upload_pack, write_pointers
 from partlet.gitutil import GitError, git_out
 from partlet.history import HistoryError, check_history
 from partlet.manifest import Manifest, Project, Site
+from partlet.scan import ScanError, Scanner
 from partlet.site.render import (
     ProjectInfo,
     render_project,
@@ -94,6 +95,7 @@ def publish_project(
     project: Project,
     store: Store,
     workdir: Path,
+    scanner: Scanner | None = None,
 ) -> ProjectResult:
     if project.approved is None:
         return ProjectResult(project.name, "skipped", reason="not approved")
@@ -125,6 +127,22 @@ def publish_project(
         if decision.action == "unchanged" and current and current.get("build") == build:
             _sweep(store, prefix)
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
+
+        # Scan all exported history before the first project write, including
+        # re-renders. Path validation above also remains before any uploads.
+        if scanner is not None:
+            findings = scanner.scan(repo, pdir / "scan")
+            if findings:
+                shown = "; ".join(f.describe() for f in findings[:5])
+                more = f" and {len(findings) - 5} more" if len(findings) > 5 else ""
+                return ProjectResult(
+                    project.name,
+                    "failed",
+                    tip,
+                    f"secret scan: {len(findings)} finding(s): {shown}{more}. "
+                    "Run partlet review to see them; accept a false positive in "
+                    ".gitleaks.toml or .gitleaksignore",
+                )
 
         # 1. New objects first: nothing references them yet.
         plan = None
@@ -170,7 +188,14 @@ def publish_project(
         _sweep(store, prefix)
         reason = "re-rendered" if decision.action == "unchanged" else decision.reason
         return ProjectResult(project.name, "published", tip, reason)
-    except (ExportError, HistoryError, GitError, TreeError, LocalPathError) as e:
+    except (
+        ExportError,
+        HistoryError,
+        GitError,
+        TreeError,
+        LocalPathError,
+        ScanError,
+    ) as e:
         return ProjectResult(project.name, "failed", tip, str(e))
 
 
@@ -200,7 +225,11 @@ def write_site_index(store: Store, site: Site) -> None:
 
 
 def publish_all(
-    monorepo: Path, manifest: Manifest, store: Store, workdir: Path
+    monorepo: Path,
+    manifest: Manifest,
+    store: Store,
+    workdir: Path,
+    scanner: Scanner | None = None,
 ) -> list[ProjectResult]:
     """Publish every project in `manifest`; one project's failure does not stop the rest.
 
@@ -210,7 +239,9 @@ def publish_all(
     results = []
     for project in manifest.projects.values():
         try:
-            result = publish_project(monorepo, manifest, project, store, workdir)
+            result = publish_project(
+                monorepo, manifest, project, store, workdir, scanner
+            )
         except Exception as e:  # noqa: BLE001 - one project must not stop the rest
             result = ProjectResult(
                 project.name, "failed", reason=f"{type(e).__name__}: {e}"

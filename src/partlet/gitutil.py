@@ -52,6 +52,16 @@ def run_filter_repo(*args: str, cwd: Path) -> None:
     _run([sys.executable, "-m", "git_filter_repo", *args], cwd=cwd)
 
 
+def clean_env() -> dict[str, str]:
+    """The process environment without variables that redirect Git."""
+    return {
+        k: v
+        for k, v in os.environ.items()
+        if k not in _LOCAL_ENV_VARS
+        and not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))
+    }
+
+
 def _run(
     cmd: list[str],
     *,
@@ -59,8 +69,7 @@ def _run(
     input: bytes | None = None,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
-    inherited = {k: v for k, v in os.environ.items() if k not in _LOCAL_ENV_VARS}
-    full_env = {**inherited, **(env or {})}
+    full_env = {**clean_env(), **(env or {})}
     proc = subprocess.run(
         cmd, check=False, cwd=cwd, input=input, env=full_env, capture_output=True
     )

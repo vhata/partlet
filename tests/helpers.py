@@ -19,6 +19,23 @@ from partlet.gitutil import git, git_out
 
 EPOCH = 1767225600  # 2026-01-01T00:00:00Z
 
+# Never inherit credentials or tool configuration in synthetic tests.
+CLOUD_PREFIXES = (
+    "AWS_",
+    "R2_",
+    "PARTLET_R2_",
+    "CLOUDFLARE_",
+    "CF_",
+    "WRANGLER_",
+    "GITLEAKS_",
+)
+GITHUB_FILE_VARS = ("GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_PATH")
+SANDBOX_AWS_VARS = (
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_EC2_METADATA_DISABLED",
+)
+
 
 class Repo:
     """A non-bare repository with deterministic commit timestamps."""
@@ -352,3 +369,14 @@ class RepoTripwire:
             f"{self.backup_dir} before restoring anything."
         )
         raise TripwireError("\n".join(parts))
+
+
+def export_tip(
+    mono: Repo, tmp_path: Path, name: str = "foo", path: str | None = None
+) -> str:
+    """The tip `partlet review` would show for a project: export once and read it."""
+    from partlet.export import export_project
+    from partlet.manifest import Project
+
+    dest = tmp_path / f"probe-{name}-{len(list(tmp_path.glob(f'probe-{name}-*')))}.git"
+    return export_project(mono.path, "main", Project(name, path or name), dest)
