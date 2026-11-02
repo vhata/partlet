@@ -60,10 +60,13 @@ class Report:
             f"Published tip: {published}",
             "",
             "Paths in history (D = deleted at the tip):",
-            *(f"  {'D' if deleted else ' '} {path}" for path, deleted in self.paths),
+            *(
+                f"  {'D' if deleted else ' '} {_path_label(path)}"
+                for path, deleted in self.paths
+            ),
             "",
             f"Files over {SIZE_CAP // 1024 // 1024} MiB anywhere in history:",
-            *(f"  {size:>12} {path}" for path, size in self.large_files),
+            *(f"  {size:>12} {_path_label(path)}" for path, size in self.large_files),
             *([] if self.large_files else ["  (none)"]),
             "",
             "Authors:",
@@ -85,8 +88,8 @@ class Report:
                 "outside path and previous_paths):"
             ),
             *(
-                f"  {e.location}: consider adding it to previous_paths\n"
-                + "".join(f"    {r}\n" for r in e.renames).rstrip("\n")
+                f"  {_path_label(e.location)}: consider adding it to previous_paths\n"
+                + "".join(f"    {_path_label(r)}\n" for r in e.renames).rstrip("\n")
                 for e in self.earlier_locations
             ),
             *([] if self.earlier_locations else ["  (none)"]),
@@ -98,7 +101,23 @@ class Report:
 
 
 def _fields(raw: bytes) -> list[str]:
-    return [f for f in raw.decode("utf-8", "backslashreplace").split("\0") if f]
+    return [f for f in raw.decode("utf-8", "surrogateescape").split("\0") if f]
+
+
+def _path_label(path: str) -> str:
+    """Display unusual paths without collapsing distinct Git byte names."""
+    shown = []
+    for char in path:
+        value = ord(char)
+        if char == "\\":
+            shown.append("\\\\")
+        elif 0xDC80 <= value <= 0xDCFF:
+            shown.append(f"\\x{value - 0xDC00:02x}")
+        elif value < 32 or value == 127:
+            shown.append(repr(char)[1:-1])
+        else:
+            shown.append(char)
+    return "".join(shown)
 
 
 def _root_of(path: str, roots: tuple[str, ...]) -> str | None:

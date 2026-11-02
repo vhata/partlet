@@ -3,7 +3,14 @@ import pytest
 from partlet.export import export_project
 from partlet.gitutil import git
 from partlet.manifest import ManifestError, Project, load_manifest
-from partlet.review import ReviewError, fetch_published_tip, large_files, run_review
+from partlet.review import (
+    ReviewError,
+    _path_label,
+    fetch_published_tip,
+    history_paths,
+    large_files,
+    run_review,
+)
 from partlet.scan import Scanner, check_gitleaks
 from partlet.site.tree import SIZE_CAP
 
@@ -194,6 +201,17 @@ def test_large_file_report_includes_deleted_names_and_shared_blobs(mono):
         ("a space.bin", 24),
         ("other.bin", 24),
     )
+
+
+def test_historical_byte_paths_remain_distinct_and_display_safely(mono):
+    mono.commit_raw(
+        {b"bad-\xff": b"a\n", b"bad-\\xff": b"b\n", b"line\nbreak": b"c\n"},
+        "unusual historical paths",
+    )
+    paths = [path for path, _deleted in history_paths(mono.path)]
+    assert len(paths) == 3
+    labels = {_path_label(path) for path in paths}
+    assert labels == {r"bad-\xff", r"bad-\\xff", r"line\nbreak"}
 
 
 def test_manifest_change_while_answering_is_not_approved(moved, tmp_path, gitleaks):
