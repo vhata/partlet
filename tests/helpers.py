@@ -369,3 +369,14 @@ class RepoTripwire:
             f"{self.backup_dir} before restoring anything."
         )
         raise TripwireError("\n".join(parts))
+
+
+def export_tip(
+    mono: Repo, tmp_path: Path, name: str = "foo", path: str | None = None
+) -> str:
+    """The tip `partlet review` would show for a project: export once and read it."""
+    from partlet.export import export_project
+    from partlet.manifest import Project
+
+    dest = tmp_path / f"probe-{name}-{len(list(tmp_path.glob(f'probe-{name}-*')))}.git"
+    return export_project(mono.path, "main", Project(name, path or name), dest)
