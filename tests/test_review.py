@@ -1,7 +1,8 @@
 import pytest
 
+from partlet.cli import main
 from partlet.export import export_project
-from partlet.gitutil import git
+from partlet.gitutil import git, git_out
 from partlet.manifest import ManifestError, Project, load_manifest
 from partlet.review import (
     ReviewError,
@@ -248,3 +249,135 @@ def test_allow_rewrite_still_requires_answer(mono, tmp_path, gitleaks):
     )
     assert code == 1
     assert (mono.path / "partlet.toml").read_bytes() == before
+
+
+def test_cli_review_then_build_publishes(mono, tmp_path, monkeypatch, capsys):
+    mono.write("foo/a.txt", "a\n")
+    mono.commit("c1")
+    mono.write("partlet.toml", MANIFEST.replace("tools/foo", "foo"))
+    mono.commit("manifest")
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    args = ["review", "foo", "--repo", str(mono.path), "--published-tip", "none"]
+    assert main(args) == 0
+    assert "Approve" not in capsys.readouterr().out  # the prompt goes to input()
+    git_out("commit", "-qam", "approve foo", cwd=mono.path)
+    out = tmp_path / "out"
+    assert main(["build", "--scan", "--repo", str(mono.path), "--out", str(out)]) == 0
+    assert "published" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("answer", ["", "n", "No", "approve", None])
+def test_cli_never_approves_without_a_yes_answer(moved, monkeypatch, answer):
+    path = moved.path / "partlet.toml"
+    before = path.read_bytes()
+
+    def respond(_prompt):
+        if answer is None:
+            raise EOFError
+        return answer
+
+    monkeypatch.setattr("builtins.input", respond)
+    assert (
+        main(["review", "foo", "--repo", str(moved.path), "--published-tip", "none"])
+        == 1
+    )
+    assert path.read_bytes() == before
+
+
+def test_cli_interrupt_does_not_approve(moved, monkeypatch):
+    path = moved.path / "partlet.toml"
+    before = path.read_bytes()
+
+    def interrupt(_prompt):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        main(["review", "foo", "--repo", str(moved.path), "--published-tip", "none"])
+    assert path.read_bytes() == before
+
+
+def test_cli_has_no_noninteractive_approval_switch(moved):
+    path = moved.path / "partlet.toml"
+    before = path.read_bytes()
+    with pytest.raises(SystemExit) as stopped:
+        main(
+            [
+                "review",
+                "foo",
+                "--repo",
+                str(moved.path),
+                "--published-tip",
+                "none",
+                "--yes",
+            ]
+        )
+    assert stopped.value.code == 2
+    assert path.read_bytes() == before
+
+
+def test_cli_unknown_project_never_fetches_public_tip(moved, monkeypatch, capsys):
+    def should_not_fetch(*args):
+        raise AssertionError("unknown projects must be rejected before HTTP")
+
+    monkeypatch.setattr("partlet.cli.fetch_published_tip", should_not_fetch)
+    assert main(["review", "missing", "--repo", str(moved.path)]) == 2
+    assert "no project" in capsys.readouterr().err
+
+
+def test_cli_review_drops_r2_keys_before_tools(moved, monkeypatch):
+    import os
+
+    from partlet import cli
+
+    monkeypatch.setenv("PARTLET_R2_ACCESS_KEY_ID", "synthetic-key")
+    monkeypatch.setenv("PARTLET_R2_SECRET_ACCESS_KEY", "synthetic-secret")
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    real_check = cli.check_tools
+
+    def check_without_keys(**kwargs):
+        assert "PARTLET_R2_ACCESS_KEY_ID" not in os.environ
+        assert "PARTLET_R2_SECRET_ACCESS_KEY" not in os.environ
+        return real_check(**kwargs)
+
+    monkeypatch.setattr(cli, "check_tools", check_without_keys)
+    assert (
+        main(["review", "foo", "--repo", str(moved.path), "--published-tip", "none"])
+        == 1
+    )
+
+
+def test_cli_rejects_manifest_switch_during_published_tip_lookup(
+    moved, tmp_path, serve, monkeypatch, capsys
+):
+    from partlet import cli
+
+    empty_site = tmp_path / "site-a"
+    empty_site.mkdir()
+    published_info = tmp_path / "site-b" / "foo" / "info"
+    published_info.mkdir(parents=True)
+    (published_info / "refs").write_text(f"{'b' * 40}\trefs/heads/main\n")
+    path = moved.path / "partlet.toml"
+    calls = []
+    real_fetch = cli.fetch_published_tip
+    with serve(empty_site) as base_a, serve(tmp_path / "site-b") as base_b:
+        assert real_fetch(base_b, "foo") == "b" * 40
+        initial = path.read_text().replace("https://partlet.example", base_a)
+        changed = initial.replace(base_a, base_b)
+        path.write_text(initial)
+
+        def fetch_then_switch(base, name):
+            tip = real_fetch(base, name)
+            assert tip is None
+            path.write_text(changed)
+            return tip
+
+        monkeypatch.setattr(cli, "fetch_published_tip", fetch_then_switch)
+        monkeypatch.setattr(
+            "builtins.input", lambda prompt: calls.append(prompt) or "y"
+        )
+        assert main(["review", "foo", "--repo", str(moved.path)]) == 2
+    assert "manifest changed during published-tip lookup" in capsys.readouterr().err
+    assert calls == []
+    assert path.read_text() == changed
+    assert load_manifest(path).projects["foo"].approved is None

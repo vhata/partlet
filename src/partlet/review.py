@@ -301,6 +301,7 @@ def run_review(
     allow_rewrite: bool,
     confirm: Callable[[str], bool],
     pager: Callable[[str], None],
+    expected_text: str | None = None,
 ) -> int:
     if published_tip is not None and not SHA_RE.fullmatch(published_tip):
         raise ReviewError("published tip must be a full commit hash or None")
@@ -308,6 +309,10 @@ def run_review(
         original = manifest_path.read_bytes().decode("utf-8")
     except (OSError, UnicodeError) as exc:
         raise ReviewError(f"cannot read {manifest_path}: {exc}") from exc
+    if expected_text is not None and original != expected_text:
+        raise ReviewError(
+            "manifest changed during published-tip lookup; run partlet review again"
+        )
     manifest = parse_manifest(original)
     project = manifest.projects.get(name)
     if project is None:

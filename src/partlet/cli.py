@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import argparse
 import os
+import pydoc
 import signal
 import sys
 import tempfile
 from pathlib import Path
 
+from partlet.export import ExportError
+from partlet.gitutil import GitError
 from partlet.lock import LockError, describe_holder, lock_key, read_lock, store_lock
-from partlet.manifest import NAME_RE, Manifest, ManifestError, load_manifest
+from partlet.manifest import (
+    NAME_RE,
+    SHA_RE,
+    Manifest,
+    ManifestError,
+    load_manifest,
+    parse_manifest,
+)
 from partlet.publish import (
     CheckoutError,
     check_checkout,
@@ -18,7 +28,8 @@ from partlet.publish import (
     publish_all,
     unpublish_project,
 )
-from partlet.scan import Scanner
+from partlet.review import ReviewError, fetch_published_tip, run_review
+from partlet.scan import ScanError, Scanner
 from partlet.store import LocalStore, R2Config, R2Store, Store, StoreError
 from partlet.summary import summary_markdown, write_summary
 from partlet.tools import ToolError, check_tools
@@ -75,6 +86,22 @@ def _parser() -> argparse.ArgumentParser:
     _repo_args(unpublish)
     unpublish.add_argument("--out", type=Path, help="local store instead of R2")
     unpublish.add_argument("--yes", action="store_true", help="do not ask")
+
+    review = sub.add_parser(
+        "review", help="inspect exported history and approve its tip"
+    )
+    review.add_argument("name", help="project name")
+    _repo_args(review)
+    review.add_argument(
+        "--allow-rewrite",
+        action="store_true",
+        help="authorize replacing the exact published tip after review",
+    )
+    review.add_argument(
+        "--published-tip",
+        metavar="SHA|none",
+        help="published tip override instead of reading the public site",
+    )
 
     unlock = sub.add_parser("unlock", help="remove a stopped publisher's stale lock")
     _repo_args(unlock)
@@ -271,6 +298,50 @@ def _unlock(args: argparse.Namespace) -> int:
     return 0
 
 
+def _review(args: argparse.Namespace) -> int:
+    _forget_r2_keys()
+    repo = args.repo.resolve()
+    manifest_path = _manifest_path(args)
+    try:
+        original = manifest_path.read_bytes().decode("utf-8")
+        manifest = parse_manifest(original)
+        if args.name not in manifest.projects:
+            return _error(f"no project {args.name!r} in {manifest_path}")
+        tools = check_tools(gitleaks=True)
+        if args.published_tip == "none":
+            published = None
+        elif args.published_tip is not None:
+            if not SHA_RE.fullmatch(args.published_tip):
+                return _error("--published-tip takes a full commit hash or 'none'")
+            published = args.published_tip
+        else:
+            published = fetch_published_tip(manifest.site.base_url, args.name)
+        with tempfile.TemporaryDirectory(prefix="partlet-review-") as tmp:
+            return run_review(
+                repo,
+                manifest_path,
+                args.name,
+                Path(tmp),
+                scanner=Scanner(tools.gitleaks, repo),
+                published_tip=published,
+                allow_rewrite=args.allow_rewrite,
+                confirm=_confirm,
+                pager=pydoc.pager,
+                expected_text=original,
+            )
+    except (
+        ManifestError,
+        ToolError,
+        ReviewError,
+        ExportError,
+        GitError,
+        ScanError,
+        OSError,
+        UnicodeError,
+    ) as exc:
+        return _error(exc)
+
+
 def _exit_on_sigterm(signum, frame):
     # A cancelled CI job gets SIGTERM; exiting this way runs the `finally`
     # blocks, so the lock is released.
@@ -282,6 +353,7 @@ COMMANDS = {
     "publish": _publish,
     "unpublish": _unpublish,
     "unlock": _unlock,
+    "review": _review,
 }
 
 
