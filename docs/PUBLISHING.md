@@ -31,6 +31,34 @@ All commands accept `--manifest <file>` in place of `<source>/partlet.toml`.
 `GITHUB_STEP_SUMMARY` when set. Summaries include project outcomes and
 actual tool versions, with escaped and bounded reasons.
 
+## Review and approval
+
+Run `.venv/bin/partlet review <name> --repo <source>` before the first
+publication and whenever changing exported paths or author mapping.
+The report shows the export tip, every historical path (with deletions
+marked), oversized historical files, authors, committers, full commit
+messages, secret findings with native fingerprints, and possible earlier
+directory locations missing from `previous_paths`.
+
+The command reads the published tip from the public site's
+`<base_url>/<name>/info/refs` and needs no R2 credentials. When the site
+is unavailable, use `--published-tip <full-sha>`; for a first publication,
+use `--published-tip none`. A malformed or ambiguous refs response fails
+the review.
+
+Review scans the full exported history using the source root's gitleaks
+configuration. Findings prevent approval. A non-fast-forward export
+requires `--allow-rewrite`; that writes `allow_rewrite_of` naming the
+exact published tip. The flag still asks for the user's approval answer,
+and there is no noninteractive approval switch. EOF, an empty answer or
+a no answer does not approve.
+
+A yes answer writes `approved` in the manifest while preserving comments,
+layout, line endings and permissions. Invalid edits leave it untouched.
+A manifest changed during published-tip lookup or while answering needs
+a fresh review. Commit and push the approval pin before publishing.
+Review modifies only the local manifest and takes no store lock.
+
 ## Configuration and credentials
 
 The [design specification](specs/2026-10-15-partlet-design.md) defines the
