@@ -190,7 +190,7 @@ def r2_config(moto_endpoint):
     import boto3
     from helpers import FAKE_R2_KEY_ID, FAKE_R2_SECRET
 
-    from partlet.r2 import R2Config
+    from partlet.store import R2Config
 
     bucket = f"partlet-test-{uuid.uuid4().hex[:12]}"
     boto3.client(

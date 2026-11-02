@@ -10,8 +10,7 @@ from partlet.gitstatic import read_state
 from partlet.gitutil import git, git_out
 from partlet.manifest import parse_manifest
 from partlet.publish import publish_all
-from partlet.r2 import StoreError
-from partlet.store import LocalStore
+from partlet.store import LocalStore, StoreError
 
 
 class FlakyStore(LocalStore):

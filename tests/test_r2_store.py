@@ -4,8 +4,7 @@ import boto3
 import pytest
 from helpers import FAKE_R2_SECRET, mirror_store
 
-from partlet.r2 import R2Config, R2Store, StoreError
-from partlet.store import LocalStore
+from partlet.store import LocalStore, R2Config, R2Store, StoreError
 
 
 @pytest.fixture(params=["local", "r2"])
@@ -273,7 +272,7 @@ def test_lost_lock_delete_response_is_not_retried(r2_config, monkeypatch, applie
     ],
 )
 def test_endpoint_error_never_echoes_url(url):
-    from partlet.r2 import check_endpoint
+    from partlet.store import check_endpoint
 
     with pytest.raises(StoreError) as exc:
         check_endpoint(url)
