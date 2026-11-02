@@ -92,6 +92,11 @@ recovery. Unpublish removes `current` and refreshes the site index before
 retiring the remaining project objects; retrying finishes a partial
 unpublish. No automatic CI unpublish feature is provided.
 
+Rapid consecutive publications can retire a pack still needed by an
+in-flight client. One publish of grace is not timed retention; the
+`fetch-retention-window` follow-up in [the queue](../TODO.md) records
+the remaining integration requirement.
+
 ## User-run setup
 
 Bucket creation, credential creation, Worker deployment, GitHub secrets,
