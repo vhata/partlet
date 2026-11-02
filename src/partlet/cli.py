@@ -169,7 +169,9 @@ def _publish(args: argparse.Namespace) -> int:
         # (git, filter-repo, gitleaks) starts.
         config = R2Config.from_env(os.environ)
         manifest = load_manifest(manifest_path)
-        check_checkout(repo, manifest.site.branch, manifest_path)
+        check_checkout(
+            repo, manifest.site.branch, manifest_path, expected_manifest=manifest
+        )
         tools = check_tools(gitleaks=True)
         store = R2Store(config)
     except (

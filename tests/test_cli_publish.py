@@ -148,6 +148,34 @@ def test_refuses_an_uncommitted_manifest_edit(
     assert "differs from the version committed" in capsys.readouterr().err
 
 
+def test_parsed_manifest_must_match_committed_manifest_despite_a_disk_race(
+    mono, tmp_path, r2_env, approved, monkeypatch, capsys, publish
+):
+    from partlet import cli
+
+    mono.write("private/notes.txt", "private history must stay private\n")
+    mono.commit("private work")
+    private_tip = export_tip(mono, tmp_path, "private", path="private")
+    path = mono.path / "partlet.toml"
+    committed = path.read_text()
+    uncommitted = committed.replace('path = "foo"', 'path = "private"').replace(
+        approved, private_tip
+    )
+    path.write_text(uncommitted)
+    real_load = cli.load_manifest
+
+    def load_then_restore_committed(file):
+        parsed = real_load(file)
+        file.write_text(committed)
+        return parsed
+
+    monkeypatch.setattr(cli, "load_manifest", load_then_restore_committed)
+    code, _summary = publish(mono)
+    assert code == 2
+    assert "manifest changed while reading" in capsys.readouterr().err
+    assert R2Store(r2_env).list("s/p/") == []
+
+
 def test_ci_enforces_the_approval_pin_and_fast_forward(
     mono, tmp_path, r2_env, approved, publish
 ):

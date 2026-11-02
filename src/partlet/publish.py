@@ -14,7 +14,7 @@ from partlet.export import ExportError, export_project
 from partlet.gitstatic import PACK_EXTS, read_state, upload_pack, write_pointers
 from partlet.gitutil import GitError, git, git_out
 from partlet.history import HistoryError, check_history
-from partlet.manifest import NAME_RE, Manifest, Project, Site
+from partlet.manifest import NAME_RE, Manifest, Project, Site, parse_manifest
 from partlet.scan import ScanError, Scanner
 from partlet.site.render import (
     ProjectInfo,
@@ -203,7 +203,13 @@ class CheckoutError(Exception):
     """The source checkout does not match the publishing branch and manifest."""
 
 
-def check_checkout(repo: Path, branch: str, manifest_path: Path) -> None:
+def check_checkout(
+    repo: Path,
+    branch: str,
+    manifest_path: Path,
+    *,
+    expected_manifest: Manifest | None = None,
+) -> None:
     """Require HEAD at the publishing tip and the manifest exactly as committed."""
     try:
         head = git_out("rev-parse", "--verify", "HEAD^{commit}", cwd=repo)
@@ -240,6 +246,11 @@ def check_checkout(repo: Path, branch: str, manifest_path: Path) -> None:
         raise CheckoutError(
             f"{relative} differs from the version committed on {branch}"
         )
+    if (
+        expected_manifest is not None
+        and parse_manifest(committed.decode("utf-8")) != expected_manifest
+    ):
+        raise CheckoutError("manifest changed while reading; run partlet publish again")
 
 
 def write_site_index(store: Store, site: Site) -> None:
