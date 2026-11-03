@@ -78,17 +78,41 @@ migration notes. Install also removes a stale `.feral/` line from
 
 ## docket/ and .docket/
 
-`docket/` is tracked and vendored. `.docket/` at the project root is local
-state, excluded from git (`install.sh` adds it to `.git/info/exclude` of the
-clone it ran in; add it to `.gitignore` so every clone agrees), and holds
-three kinds of content:
+`docket/` is tracked and vendored. `.docket/` at the project root is
+local state, excluded from git (`install.sh` adds it to
+`.git/info/exclude` of the clone it ran in; add it to `.gitignore` so
+every clone agrees), and holds the review and coordination artifacts:
 
 - `.docket/AUDIT.md`: the append-only decision log kept during unattended
   runs, one entry per load-bearing decision with an undo line.
-- `.docket/pr-<slug>.md`: a prepared pull request body, saved when work is
-  ready but no PR can be opened from the current environment.
-- `.docket/review-<slug>.md`: the matching independent review, posted as a
-  PR comment when the PR is opened.
+- `.docket/title-<slug>.txt` and `.docket/change-<slug>.md`: the change
+  title and description, used for local review or a PR awaiting
+  publication. The title becomes the squash subject; the full
+  description is its body. Older `.docket/pr-<slug>.md` drafts can be
+  reused or renamed when updated.
+- `.docket/review-<slug>.md`: independent review and dispositions,
+  posted as a PR comment in hosted mode.
+- `.docket/state-<slug>.md`: review mode, branch, base/head commits,
+  checks, draft/ready status and explicit user landing approval when
+  given.
+
+After landing preserve these files and unique evidence under
+`.docket/landed-<slug>/` in the retained main checkout before removing
+the task worktree. Verify preservation before removing only those source
+artifacts; use `rmdir` for now-empty directories, including `.docket/`.
+Inspect and preserve other unique content before cleanup. Ignored
+`.docket/` directories are discarded with a landed worktree, just like
+known caches; the script does not archive them or verify preservation.
+Blanket `--discard-ignored` is not a substitute for preserving records
+elsewhere either. Local landing receipts live
+separately in the common Git directory at `docket/landed/<branch>`, with an audit reference at
+`refs/docket/landed/<branch>` retaining the approved commit through Git
+garbage collection. These proof records survive work branch cleanup.
+`land-local.sh` writes them and `cleanup-landed.sh` verifies them before
+removing an exact landed tip. Branch deletion requires that tip still to
+match, preserving a branch that advanced concurrently. Cleanup retains
+branch-specific Git configuration; `start-work.sh` clears stale upstream
+tracking when creating a branch and preserves its other settings.
 
 ## Files
 
@@ -97,17 +121,20 @@ three kinds of content:
 | `README.md` | This file. |
 | `CONTRACT.md` | The workflow rules every agent reads first. |
 | `TODO_GUIDE.md` | Capture, triage, claim and resolve deferred work in `TODO.md` and `review/BACKLOG.md`. |
-| `CODE_REVIEW_GUIDE.md` | PR review and codebase review, and the review ledger under `review/`. |
+| `CODE_REVIEW_GUIDE.md` | Change review and codebase review, and the review ledger under `review/`. |
 | `VERSION` | The skill commit and date these files were installed from. |
-| `scripts/ci.sh` | The single entry point CI calls; runs `check-queues.sh --strict`, then `check-links.sh`, then `check-pr-markers.sh` when `PR` is set, and stops at the first failure. On pull requests it reads the PR body from the event payload (`GITHUB_EVENT_PATH`, with `jq`) and falls back to `gh pr view`, which needs `pull-requests: read`. |
-| `scripts/check-queues.sh` | Validates the structure of `TODO.md` and `review/BACKLOG.md`: entry format, unique slugs, `Source` lines, cross-references and dependencies, and that each Waiting entry names what it waits on. |
-| `scripts/check-pr-markers.sh` | Validates a pull request description's markers against the queues at the base and head commits, its `Type:` line, and its line length (prose wrapped at 72 columns). |
-| `scripts/pr-labels.sh` | Derives a pull request's labels from its branch, its `Type:` line and the queue entries it claims or resolves; `--apply` creates missing labels and sets them on the pull request. |
+| `scripts/ci.sh` | The single entry point CI calls; runs `check-queues.sh --strict`, then `check-links.sh`, then `check-pr-markers.sh --no-target` when `PR` is set, and stops at the first failure. In a sidecar it checks the sidecar's own PRs and needs no managed clone. On pull requests it reads the PR body from the event payload (`GITHUB_EVENT_PATH`, with `jq`) and falls back to `gh pr view`, which needs `pull-requests: read`. |
+| `scripts/check-queues.sh` | Validates the structure of `TODO.md` and `review/BACKLOG.md`: entry format, unique slugs, `Source` lines, cross-references and dependencies, that each Waiting entry names what it waits on, and the format of `PR:` claim lines (in a sidecar, that they name the managed repository). |
+| `scripts/check-pr-markers.sh` | Validates a change description's markers against the queues at the base and head commits, its `Type:` line, and its line length (prose wrapped at 72 columns). In a sidecar it stands down for the managed repository's PRs; `--no-target` checks the sidecar's own. |
+| `scripts/pr-labels.sh` | Derives a pull request's labels from its branch, its `Type:` line and the queue entries it claims or resolves; `--apply` creates missing labels and sets them on the pull request. In a sidecar it stands down; `--no-target` labels the sidecar's own PRs. |
 | `scripts/check-links.sh` | Checks that relative Markdown links, images and `#anchors` resolve to existing files and headings. |
-| `scripts/claim-check.sh` | Looks for existing claims on a slug: open and merged pull requests (a body marker, or a head branch whose last path component is the slug), branches and worktrees. `--self` rechecks from inside the claimed worktree, ignoring the worker's own branch. |
-| `scripts/start-work.sh` | Runs the claim check, then creates the `<queue>/<slug>` branch and its worktree. |
-| `scripts/cleanup-landed.sh` | Removes branches and worktrees whose pull requests have merged; a dry run unless `--apply` is given. Known caches in a worktree are discarded with it; other ignored files hold it back unless `--discard-ignored` is given. |
-| `scripts/review-due.sh` | Measures movement since the last recorded codebase review and says whether an incremental or full review is due; binary assets are not counted as source. |
+| `scripts/claim-check.sh` | Looks for existing claims and local completions on a slug (landing receipts and exact resolution markers on main): open and merged pull requests (a body marker, or a head branch whose last path component is the slug), branches, worktrees, and queue entries carrying a `PR:` line. `--self` rechecks from inside the claimed worktree, ignoring the worker's own branch. |
+| `scripts/start-work.sh` | Runs the claim check, then creates the `<queue>/<slug>` branch and its worktree. Local mode uses local main and skips forge/fetch operations. |
+| `scripts/target.sh` | Parses and validates a sidecar's `.docket-target` file, which names a managed repository and its local clone. Sourced by `claim-check.sh`, `start-work.sh`, `cleanup-landed.sh`, `review-due.sh` and `pr-health.sh`, which then work on branches, worktrees, PRs and commits in the managed repository, by `check-pr-markers.sh` and `pr-labels.sh`, which stand down, and by `check-queues.sh`, which reads only its `repo` line (`--no-target` ignores the file). There `start-work.sh` marks the branches it creates (`branch.<name>.docket`) and `cleanup-landed.sh` touches only marked branches. Run directly, it prints the resolved settings. |
+| `scripts/land-local.sh` | After explicit user approval, squash-lands the exact reviewed branch head into the clean base checkout, using the title and description and writing a landing receipt. |
+| `scripts/cleanup-landed.sh` | Removes branches and worktrees proved landed by merged PRs or verified local receipts; a dry run unless `--apply` is given. Automatically discovers folded workers by checking their exact changed paths at historical landings, and reports the proof or why they are retained. Known caches and ignored `.docket/` directories are discarded with the worktree; preserve their records first. Other ignored files hold it back unless `--discard-ignored` is given. In a sidecar it also lists queue entries whose `PR:` pull requests have all closed, to resolve or release by hand. |
+| `scripts/pr-health.sh` | Reports, read-only, on open pull requests (the current user's by default, or `--pr`, `--repo`): CI checks, review decision, merge state and conflicts, commits behind the base, a landing comment (`--land-comment`) on a PR that is still open, and queue markers whose entry is no longer in this checkout. `--strict` exits 1 on failing checks, changes requested or conflicts. In a sidecar `--repo` and `--land-comment` default to the target's `repo` and `land_comment`, and each managed PR lists the queue entries whose `PR:` line names it instead of its body markers (`--no-target` ignores the target). |
+| `scripts/review-due.sh` | Measures movement since the last recorded codebase review and says whether an incremental or full review is due; binary assets are not counted as source. `--repo-dir` measures another repository against this one's index. |
 
 Run the scripts from anywhere inside the project as
 `bash docket/scripts/<name>.sh`. Each script's header comment documents its

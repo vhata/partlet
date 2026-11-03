@@ -184,8 +184,8 @@ def test_docket_fields_stay_on_single_lines(repo, path):
         )
     else:
         validator = repo.path / "docket/scripts/check-queues.sh"
-        validator.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / "docket/scripts/check-queues.sh", validator)
+        # Keep the validator's sourced helpers available in the fixture.
+        shutil.copytree(ROOT / "docket/scripts", validator.parent)
         result = subprocess.run(
             ["bash", str(validator), "--strict"],
             cwd=repo.path,

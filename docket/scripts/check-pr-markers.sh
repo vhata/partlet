@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate a pull request description against the work queues.
+# Validate a change description against the work queues.
 #
 # Checks: the description opens with "## Why"; every marker line uses the
 # exact vocabulary; claimed slugs still exist at head; resolved slugs existed
@@ -9,16 +9,21 @@
 # are at most 72 characters (warning).
 #
 # Usage:
-#   docket/scripts/check-pr-markers.sh --body FILE [--base REF] [--head REF] [--todo PATH] [--backlog PATH] [--strict]
-#   docket/scripts/check-pr-markers.sh --pr NUMBER [--base REF] [--head REF] [--strict]
+#   docket/scripts/check-pr-markers.sh --body FILE [--base REF] [--head REF] [--todo PATH] [--backlog PATH] [--strict] [--local] [--no-target]
+#   docket/scripts/check-pr-markers.sh --pr NUMBER [--base REF] [--head REF] [--strict] [--no-target]
 #
-# Defaults: --base origin/main (local main when there is no origin), --head HEAD,
+# Defaults: --base origin/main (main without remotes or with --local), --head HEAD,
 # TODO.md, review/BACKLOG.md. --branch NAME (default: the head's branch) enables
 # the claim rule: a branch named <queue>/<slug> must carry a marker for <slug>.
 # With --pr the body is fetched with `gh pr view`; run it from the PR branch
 # or pass refs explicitly. In CI on a pull_request event use --base
 # "origin/$GITHUB_BASE_REF" and --head HEAD (the merge commit). --strict
-# turns warnings into errors.
+# turns warnings into errors. --local never queries a forge; use --body.
+#
+# In a sidecar with a managed-repository target (.docket-target; see
+# target.sh) the managed repository's PRs carry no markers, so the script
+# stands down: it prints one line and exits 0. --no-target checks a
+# description for the sidecar's own PR, as ci.sh and land-local.sh do.
 #
 # Marker vocabulary (one per line, at the start of the line rather than in a
 # list or quote; no backticks, no trailing punctuation):
@@ -45,31 +50,43 @@
 set -euo pipefail
 
 orig="$PWD"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$root"
 # Make a path given on the command line absolute relative to the caller's directory.
 abs() { case "$1" in /*) printf '%s\n' "$1" ;; *) printf '%s/%s\n' "$orig" "$1" ;; esac; }
 
-body=""; pr=""; base="origin/main"; head="HEAD"; todo="TODO.md"; backlog="review/BACKLOG.md"; branch=""; strict=0
+body=""; pr=""; base="origin/main"; head="HEAD"; todo="TODO.md"; backlog="review/BACKLOG.md"; branch=""; strict=0; local_only=0; explicit_base=0; no_target=
 while [ $# -gt 0 ]; do
   case "$1" in
     --body) body="$(abs "$2")"; shift 2 ;;
     --pr) pr="$2"; shift 2 ;;
-    --base) base="$2"; shift 2 ;;
+    --base) base="$2"; explicit_base=1; shift 2 ;;
     --head) head="$2"; shift 2 ;;
     --todo) todo="$2"; shift 2 ;;
     --backlog) backlog="$2"; shift 2 ;;
     --branch) branch="$2"; shift 2 ;;
     --strict) strict=1; shift ;;
-    -h|--help) sed -n '2,44p' "$0"; exit 0 ;;
+    --local) local_only=1; shift ;;
+    --no-target) no_target=--no-target; shift ;;
+    -h|--help) sed -n '2,49p' "$0"; exit 0 ;;
     *) echo "check-pr-markers: unknown argument $1" >&2; exit 2 ;;
   esac
 done
+# shellcheck source=target.sh
+. "$here/target.sh"
+docket_target_init "$here" "$no_target" || exit 2
+if [ -n "$DOCKET_TARGET" ]; then
+  echo "check-pr-markers: not applicable: $TARGET_REPO's PRs follow its own template and carry no docket markers; the sidecar's queue records the claim (pass --no-target for a sidecar PR)"
+  exit 0
+fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-if [ "$base" = "origin/main" ] && ! git rev-parse --verify --quiet origin/main >/dev/null; then
+[ -n "$(git remote)" ] || local_only=1
+if [ "$explicit_base" -eq 0 ] && [ "$local_only" -eq 1 ]; then base="main"; fi
+if [ "$explicit_base" -eq 0 ] && [ "$base" = "origin/main" ] && ! git rev-parse --verify --quiet origin/main >/dev/null; then
   if git rev-parse --verify --quiet main >/dev/null; then base="main"; echo "note: no origin/main; comparing against local main"; fi
 fi
 # An unknown ref would make every snapshot empty and every Resolves marker
@@ -80,6 +97,8 @@ for ref in "$base" "$head"; do
 done
 
 if [ -n "$pr" ]; then
+  [ "$local_only" -eq 0 ] || { echo "check-pr-markers: --pr is unavailable in local review mode; use --body" >&2; exit 2; }
+  unset GH_REPO
   gh pr view "$pr" --json body -q .body > "$tmp/body.md"
   body="$tmp/body.md"
 fi
@@ -286,9 +305,13 @@ while IFS= read -r line; do
       if [ -n "$claimed_backlog" ]; then
         # A claimed entry lives at head; a resolved one lived at base. An entry
         # filed and claimed in the same PR exists only at head, so look in both.
+        # Search a file, not a pipe: under pipefail, grep -q exiting on an
+        # early match would make a producer still writing die of SIGPIPE and
+        # turn the match into a miss.
         found=0
         for b in $claimed_backlog; do
-          { entry_block "$tmp/backlog.base" "$b"; entry_block "$tmp/backlog.head" "$b"; } | grep -q "\`$slug\`" && found=1
+          { entry_block "$tmp/backlog.base" "$b"; entry_block "$tmp/backlog.head" "$b"; } > "$tmp/claimed-entry"
+          grep -q "\`$slug\`" "$tmp/claimed-entry" && found=1
         done
         [ "$found" -eq 1 ] || warn "$verb: $slug is not listed in the Findings of the claimed backlog entries ($claimed_backlog)"
       else
