@@ -31,3 +31,5 @@ packages = ["src/partlet"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
+markers = ["e2e: publisher CLI through simulated S3, local R2 and public Worker routes"]
+addopts = "-m 'not e2e'"

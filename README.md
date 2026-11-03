@@ -103,6 +103,11 @@ these steps or establish hosted behavior.
    WRANGLER_SEND_METRICS=false node_modules/.bin/wrangler deploy
    ```
 
+   For an existing site, allow previously cached 60-second Git metadata
+   to expire after deploying the new Worker and before publishing again.
+   New metadata responses use `no-store`; pack retention separately
+   protects in-flight fetches.
+
 5. Set the source repository secrets. Each command prompts for the
    value so it stays out of shell history:
 
@@ -142,6 +147,7 @@ public_site=https://partlet.example.com
 project=foo
 git clone "$public_site/$project" partlet-live-check
 curl --fail --show-error "$public_site/$project/info/refs"
+curl --fail --show-error --head "$public_site/$project/objects/info/packs"
 curl --fail --show-error "$public_site/$project/objects/info/packs"
 curl --fail --show-error "$public_site/$project/"
 curl --fail --show-error "$public_site/$project/raw/README.md"
@@ -158,11 +164,28 @@ git -C partlet-live-check pull --ff-only
 git -C partlet-live-check log -1 --oneline
 ```
 
+Confirm metadata responses carry `Cache-Control: no-store`.
 Confirm the expected exported change, and open the site index, project,
 directory and file pages in a browser. Verify raw-download behavior,
 archives, and the deployed Worker's domain and bucket binding. Repeat
 an unchanged run and check its summary. These are required live checks;
 local simulations and hosted CI do not establish them.
+
+## Publication consistency
+
+Git metadata (`HEAD`, `info/refs`, `objects/info/packs`) uses `no-store`
+to avoid mixing independent cached generations. Content-addressed packs
+and indexes remain immutable. Retired packs stay available for at least
+one hour after the first sweep observes them outside the live and previous
+pack lists. This bounds the supported in-flight fetch window; a fetch
+that outlasts it must restart. Explicit approved rewrites and unpublish
+can intentionally invalidate an older history. Retired site builds and
+archives keep their separate one-publication grace.
+
+See [Publisher contracts](docs/PUBLISHING.md#serialization-and-recovery)
+for durable retirement, interrupted runs, storage cost and expiry. Both
+cache behavior and rapid-publication retention are tested through public
+Worker routes with synthetic data. Hosted acceptance remains user-run.
 
 ## Removal and recovery
 
@@ -187,6 +210,7 @@ Use synthetic repositories and local simulated services:
 ```bash
 bash scripts/setup.sh
 bash scripts/check.sh
+bash scripts/e2e.sh
 ```
 
 See [Quality](docs/QUALITY.md) and the [Worker guide](worker/README.md)

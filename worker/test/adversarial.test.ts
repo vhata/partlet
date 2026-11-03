@@ -315,8 +315,8 @@ describe("content safety and error policy", () => {
   });
 });
 
-describe("cache and publication grace boundary", () => {
-  it("a cached pack list can outlive one-publication retention", async () => {
+describe("cache and out-of-policy deletion boundary", () => {
+  it("an explicitly deleted advertised pack returns an uncached 404", async () => {
     const project = "grace";
     const firstPack = `pack-${"1".repeat(40)}`;
     const secondPack = `pack-${"2".repeat(40)}`;
@@ -324,13 +324,14 @@ describe("cache and publication grace boundary", () => {
     await put(`p/${project}/git/objects/pack/${firstPack}.pack`, "first pack");
     await put(`p/${project}/git/objects/info/packs`, `P ${firstPack}.pack\n\n`);
     const metadata = await get(`/${project}/objects/info/packs`);
-    expect(metadata.headers.get("Cache-Control")).toBe("public, max-age=60");
+    expect(metadata.headers.get("Cache-Control")).toBe("no-store");
     const cachedList = await text(metadata);
 
-    // Two successive consolidations can both complete inside the 60-second
-    // freshness window. The publisher keeps only the immediate predecessor:
-    // after B, A survives; after C, only B and C remain. Simulate that sweep
-    // exactly, while the client still holds the initially fresh metadata.
+    // Reproduce a paused fetch under the historical one-publication policy
+    // by deleting A explicitly after the client read its metadata. The publisher now retains
+    // retired packs for an hour; tests/e2e/test_wrangler.py exercises that
+    // protection through actual publication and public Worker object URLs.
+    // The Worker must still fail safely after out-of-policy deletion.
     await put(`p/${project}/git/objects/pack/${secondPack}.pack`, "second pack");
     await put(`p/${project}/git/objects/info/packs`, `P ${secondPack}.pack\n\n`);
     expect((await get(`/${project}/objects/pack/${firstPack}.pack`)).status).toBe(200);
