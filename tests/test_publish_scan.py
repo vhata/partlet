@@ -118,6 +118,29 @@ def test_rerender_scans_existing_history_before_writing(mono, tmp_path, gitleaks
     assert {key: store.get(key) for key in store.list("s/")} == before
 
 
+def test_missing_head_repair_scans_existing_history_before_writing(
+    mono, tmp_path, gitleaks
+):
+    mono.write("foo/config.py", f'TOKEN = "{FAKE_TOKEN}"\n')
+    mono.write(
+        ".gitleaks.toml",
+        "[extend]\nuseDefault = true\n[allowlist]\npaths = ['config.py']\n",
+    )
+    mono.commit("allowlisted token")
+    approved = export_tip(mono, tmp_path)
+    store = LocalStore(tmp_path / "out")
+    assert publish(mono, tmp_path, store, approved, gitleaks).status == "published"
+    store.delete("s/p/foo/git/HEAD")
+    before = {key: store.get(key) for key in store.list("s/")}
+    (mono.path / ".gitleaks.toml").unlink()
+
+    result = publish(mono, tmp_path, store, approved, gitleaks)
+    assert result.status == "failed"
+    assert "secret scan: 1 finding(s)" in result.reason
+    assert {key: store.get(key) for key in store.list("s/")} == before
+    assert store.get("s/p/foo/git/HEAD") is None
+
+
 def test_deleted_exported_side_branch_secret_blocks_publication(
     mono, tmp_path, gitleaks
 ):

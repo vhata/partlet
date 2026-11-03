@@ -70,6 +70,7 @@ def assert_live_state_complete(store):
     if raw is None:
         return  # a first publication has not made a site live yet
     current = json.loads(raw)
+    assert store.get(f"{prefix}/git/HEAD") == b"ref: refs/heads/main\n"
     assert store.get(f"{prefix}/site/{current['build']}/index.html") is not None
     for fmt in ARCHIVE_FORMATS:
         assert store.get(f"{prefix}/archive/{current['tip']}.{fmt}") is not None
