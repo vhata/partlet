@@ -69,11 +69,11 @@ stable store namespaces. Approval pins name exported commits, not source
 commits. A rewrite requires `allow_rewrite_of` naming the exact
 published tip.
 
-Project `path` and `previous_paths` cannot contain a colon (`:`), because
-git-filter-repo uses it to separate source and destination in path renames.
-Manifest validation reports the unsupported field and value before export.
-Colons in file names inside an otherwise supported project path remain
-supported.
+Project `path` and `previous_paths` cannot contain a colon (`:`),
+because git-filter-repo uses it to separate source and destination in
+path renames. Manifest validation reports the unsupported field and
+value before export. Colons in file names inside an otherwise supported
+project path remain supported.
 
 R2 commands require these environment variables:
 
