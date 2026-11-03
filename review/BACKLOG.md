@@ -17,9 +17,3 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
   - Starting point: `normalize_path` in `src/partlet/manifest.py` and `export_project` in `src/partlet/export.py`; reproduce with `foo:bar`.
   - Findings: `export-colon-path-rename`
-
-- [TOOLING] `require-executed-python-tests` — **Run tests.** Fail the Python gate when no test executes. A wholly skipped suite passes despite the documented gate policy.
-
-  - Source: review/2026-11-03-1933-full.md, 2026-11-03
-  - Starting point: `scripts/test.sh` and pytest session reporting in `tests/conftest.py`; permit platform skips while rejecting a suite containing one skipped test and no executed cases.
-  - Findings: `all-skipped-test-gate`
