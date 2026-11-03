@@ -98,6 +98,33 @@ def test_bad_project(project, message):
         parse_manifest(SITE + project)
 
 
+@pytest.mark.parametrize("field", ["path", "previous_paths"])
+@pytest.mark.parametrize("path", ["foo:bar", ":foo", "foo:", "/tools/foo:bar/"])
+def test_colon_paths_are_rejected_with_field_and_path(field, path):
+    fields = (
+        f'path = "{path}"'
+        if field == "path"
+        else (f'path = "foo"\nprevious_paths = ["{path}"]')
+    )
+    with pytest.raises(ManifestError, match="colon") as exc:
+        parse_manifest(SITE + f"[projects.foo]\n{fields}\n")
+    assert f"projects.foo.{field}" in str(exc.value)
+    assert path in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "path, expected",
+    [
+        ("/my tools/é%?#;!/", "my tools/é%?#;!"),
+        ("tools/[foo]/", "tools/[foo]"),
+        ("a//b/", "a/b"),
+    ],
+)
+def test_supported_paths_keep_existing_normalization(path, expected):
+    manifest = parse_manifest(SITE + f'[projects.foo]\npath = "{path}"\n')
+    assert manifest.projects["foo"].path == expected
+
+
 def test_invalid_toml():
     with pytest.raises(ManifestError, match="invalid TOML"):
         parse_manifest("[site\n")

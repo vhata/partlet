@@ -127,6 +127,10 @@ def parse_manifest(text: str) -> Manifest:
 def normalize_path(value: Any, where: str) -> str:
     if not isinstance(value, str):
         raise ManifestError(f"{where}: path must be a string")
+    if ":" in value:
+        raise ManifestError(
+            f"{where}: path {value!r} contains a colon; use project paths without ':'"
+        )
     if "\\" in value:
         raise ManifestError(f"{where}: invalid path {value!r}")
     parts = PurePosixPath(value.strip("/")).parts

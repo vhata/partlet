@@ -267,6 +267,37 @@ def test_path_that_is_a_file_fails(mono, tmp_path):
         export_project(mono.path, "main", Project("foo", "foo"), tmp_path / "e.git")
 
 
+@pytest.mark.parametrize(
+    "project, rejected",
+    [
+        (Project("foo", "foo:bar"), "foo:bar"),
+        (Project("foo", "foo", previous_paths=("old:foo",)), "old:foo"),
+    ],
+)
+def test_colon_paths_fail_before_creating_export(mono, tmp_path, project, rejected):
+    mono.write(f"{project.path}/a.txt", "project content\n")
+    original_tip = mono.commit("project")
+    dest = tmp_path / "exports" / "e.git"
+
+    with pytest.raises(ExportError, match="colon") as exc:
+        export_project(mono.path, "main", project, dest)
+
+    assert rejected in str(exc.value)
+    assert not dest.parent.exists()
+    assert git_out("rev-parse", "HEAD", cwd=mono.path) == original_tip
+
+
+def test_colon_in_file_name_remains_supported(mono, tmp_path):
+    mono.write("foo/a:b.txt", "colon in a file name\n")
+    mono.commit("supported file name")
+    dest = tmp_path / "e.git"
+
+    export_project(mono.path, "main", Project("foo", "foo"), dest)
+
+    assert files_at(dest) == ["a:b.txt"]
+    assert git_out("show", "HEAD:a:b.txt", cwd=dest) == "colon in a file name"
+
+
 def test_shallow_monorepo_is_rejected(mono, tmp_path):
     make_basic(mono)
     shallow = tmp_path / "shallow"
