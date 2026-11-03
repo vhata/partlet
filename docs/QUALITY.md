@@ -101,12 +101,13 @@ gates, local preview and the cache/retention evidence limit.
 - Documentation-only changes need no new tests;
   `docket/scripts/check-links.sh` covers their links.
 - An empty or wholly skipped suite is a failed gate. For the Python
-  gates, individual skips remain allowed when another case executes.
-  A call-phase pass, failure or expected failure counts as execution;
-  a plain runtime skip, setup skip or `xfail(run=False)` does not.
+  gates, individual skips remain allowed when another case executes. A
+  call-phase pass, failure or expected failure counts as execution; a
+  plain runtime skip, setup skip or `xfail(run=False)` does not.
   Collection-only and fixture inspection modes retain pytest's normal
-  status. Both Python gate scripts use `tests/pytest_gate.py`, preserving
-  existing failures from tests, collection and the repository tripwire.
+  status. Both Python gate scripts use `tests/pytest_gate.py`,
+  preserving existing failures from tests, collection and the repository
+  tripwire.
 - Tests run git in a sandbox: `tests/conftest.py` removes inherited
   `GIT_*` variables when it is imported. At session start, before test
   modules are collected, it arms the tripwire, points `HOME` and the
