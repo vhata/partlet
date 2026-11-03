@@ -14,7 +14,7 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 - [PUBLISHER] `publish-retry-static-head` — **Restore Git HEAD.** A
   successful retry of an interrupted first publication currently leaves
-  the documented metadata endpoint missing until the export tip advances.
+  the metadata endpoint missing until the export tip advances.
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
   - Starting point: `publish_project` in `src/partlet/publish.py` and
     `write_pointers` in `src/partlet/gitstatic.py`; interrupt before the
@@ -23,18 +23,19 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 - [PUBLISHER] `export-colon-path-validation` — **Handle colon paths.**
   Support colon-containing project paths or reject them before export.
-  Manifest normalization accepts these paths but filter-repo's path-rename
-  syntax cannot use them.
+  Manifest normalization accepts paths that filter-repo's path-rename
+  syntax cannot use.
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
   - Starting point: `normalize_path` in `src/partlet/manifest.py` and
-    `export_project` in `src/partlet/export.py`; reproduce with `foo:bar`.
+    `export_project` in `src/partlet/export.py`; reproduce with
+    `foo:bar`.
   - Findings: `export-colon-path-rename`
 
-- [TOOLING] `require-executed-python-tests` — **Require executed tests.**
+- [TOOLING] `require-executed-python-tests` — **Run tests.**
   Fail the Python gate when no test executes. A wholly skipped suite
   passes despite the documented gate policy.
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
   - Starting point: `scripts/test.sh` and pytest session reporting in
-    `tests/conftest.py`; permit individual platform skips while rejecting
-    a synthetic suite containing one skipped test and no executed cases.
+    `tests/conftest.py`; permit platform skips while rejecting a suite
+    containing one skipped test and no executed cases.
   - Findings: `all-skipped-test-gate`
