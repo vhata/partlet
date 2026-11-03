@@ -14,7 +14,6 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 
 ### Unprioritized
 
-
 ## Needs proof of concept
 
 ### P0 Critical

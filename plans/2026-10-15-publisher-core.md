@@ -5,13 +5,26 @@ The current layout and build-ID salt are documented in
 [Decisions](../docs/DECISIONS.md#2026-10-26) and the
 [Worker plan](2026-10-17-worker.md#dependencies-on-the-review-backlog).
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps
+> use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A `partlet build --out <dir>` command that exports every approved project from a monorepo, checks its history, and writes a complete Partlet site (dumb-HTTP Git files, rendered pages, raw files, archives, site index) into a local directory, such that `git clone` and `git pull` work against that directory served by any static HTTP server.
+**Goal:** A `partlet build --out <dir>` command that exports every
+approved project from a monorepo, checks its history, and writes a
+complete Partlet site (dumb-HTTP Git files, rendered pages, raw files,
+archives, site index) into a local directory, such that `git clone` and
+`git pull` work against that directory served by any static HTTP server.
 
-**Architecture:** A Python package (`src/partlet`) with one module per pipeline stage: manifest, export (git filter-repo), history checks, dumb-HTTP packing, site rendering, archives, and a publish pipeline that writes through a small `Store` interface. This plan implements only the local-directory store; the R2 store, secret scanning, `partlet review`, the Worker, and the GitHub Action come in later plans.
+**Architecture:** A Python package (`src/partlet`) with one module per
+pipeline stage: manifest, export (git filter-repo), history checks,
+dumb-HTTP packing, site rendering, archives, and a publish pipeline that
+writes through a small `Store` interface. This plan implements only the
+local-directory store; the R2 store, secret scanning, `partlet review`,
+the Worker, and the GitHub Action come in later plans.
 
-**Tech Stack:** Python 3.12, git 2.4x+, git-filter-repo (pip), Jinja2, markdown-it-py, Pygments, pytest. Packaged with hatchling.
+**Tech Stack:** Python 3.12, git 2.4x+, git-filter-repo (pip), Jinja2,
+markdown-it-py, Pygments, pytest. Packaged with hatchling.
 
 **Spec:** `docs/specs/2026-10-15-partlet-design.md`
 
@@ -19,43 +32,80 @@ The current layout and build-ID salt are documented in
 
 This is plan 1 of 3.
 
-1. **Publisher core (this plan).** Manifest, export, history checks, packs and pointers, site, archives, publish pipeline, local store, `partlet build`.
-2. **Worker.** TypeScript Worker: routing, R2 reads, caching, raw content-type policy, dumb-HTTP `info/refs`, tests on the Workers pool.
-3. **Publishing to R2.** R2 store, gitleaks scanning, `partlet review`, `partlet publish` and `unpublish`, step summary, composite `action.yml`, end-to-end test through `wrangler dev` and its CI job.
+1. **Publisher core (this plan).** Manifest, export, history checks,
+   packs and pointers, site, archives, publish pipeline, local store,
+   `partlet build`.
+1. **Worker.** TypeScript Worker: routing, R2 reads, caching, raw
+   content-type policy, dumb-HTTP `info/refs`, tests on the Workers
+   pool.
+1. **Publishing to R2.** R2 store, gitleaks scanning, `partlet review`,
+   `partlet publish` and `unpublish`, step summary, composite
+   `action.yml`, end-to-end test through `wrangler dev` and its CI job.
 
 ## Global Constraints
 
-- Python `>=3.12`. Each worktree has its own `.venv`, created by `bash scripts/setup.sh` (Task 1). Run tests with `bash scripts/test.sh` or `.venv/bin/pytest`.
-- Before every commit, `bash scripts/check.sh` passes: ruff format check, shellcheck plus ruff lint, and the test suite. Run `.venv/bin/ruff format src tests` to fix formatting.
-- Project names match `[a-z0-9][a-z0-9._-]*`; names ending in `.git` are rejected.
-- Exports keep only `refs/heads/main`, whatever the monorepo's publishing branch is called.
-- Given the same monorepo history, path list, mailmap and tool versions, an export produces identical commit hashes.
-- A missing `path` at the tip of the publishing branch fails the project; it never publishes an empty tree.
-- Consolidate packs when a project has more than 20 packs (`MAX_PACKS = 20`).
-- Files that are binary or larger than 1 MiB (`SIZE_CAP = 1024 * 1024`) get no viewer page, only a raw link.
-- Rendered pages contain no JavaScript. Markdown raw HTML is escaped, never passed through.
-- Generated links are root-relative: `/<name>`, `/<name>/tree/<dir>`, `/<name>/blob/<path>`, `/<name>/raw/<path>`, `/<name>/archive/<name>.<fmt>`, stylesheet at `/_partlet/style.css`.
+- Python `>=3.12`. Each worktree has its own `.venv`, created by
+  `bash scripts/setup.sh` (Task 1). Run tests with
+  `bash scripts/test.sh` or `.venv/bin/pytest`.
+- Before every commit, `bash scripts/check.sh` passes: ruff format
+  check, shellcheck plus ruff lint, and the test suite. Run
+  `.venv/bin/ruff format src tests` to fix formatting.
+- Project names match `[a-z0-9][a-z0-9._-]*`; names ending in `.git` are
+  rejected.
+- Exports keep only `refs/heads/main`, whatever the monorepo's
+  publishing branch is called.
+- Given the same monorepo history, path list, mailmap and tool versions,
+  an export produces identical commit hashes.
+- A missing `path` at the tip of the publishing branch fails the
+  project; it never publishes an empty tree.
+- Consolidate packs when a project has more than 20 packs
+  (`MAX_PACKS = 20`).
+- Files that are binary or larger than 1 MiB (`SIZE_CAP = 1024 * 1024`)
+  get no viewer page, only a raw link.
+- Rendered pages contain no JavaScript. Markdown raw HTML is escaped,
+  never passed through.
+- Generated links are root-relative: `/<name>`, `/<name>/tree/<dir>`,
+  `/<name>/blob/<path>`, `/<name>/raw/<path>`,
+  `/<name>/archive/<name>.<fmt>`, stylesheet at `/_partlet/style.css`.
 - Store keys (all under `<source>/`):
   - `index.html`, `index.json`, `static/style.css`
   - `p/<name>/current`, `p/<name>/cleanup.json`
-  - `p/<name>/git/HEAD`, `p/<name>/git/info/refs`, `p/<name>/git/objects/info/packs`, `p/<name>/git/objects/pack/pack-*.{pack,idx}`
+  - `p/<name>/git/HEAD`, `p/<name>/git/info/refs`,
+    `p/<name>/git/objects/info/packs`,
+    `p/<name>/git/objects/pack/pack-*.{pack,idx}`
   - `p/<name>/site/<build>/...`
   - `p/<name>/archive/<sha>.{tar.gz,zip}`
-- Upload order within a project: pack files, site build, archives, then pointers (`objects/info/packs`, `info/refs`, `HEAD`), then `current`, then `cleanup.json`.
+- Upload order within a project: pack files, site build, archives, then
+  pointers (`objects/info/packs`, `info/refs`, `HEAD`), then `current`,
+  then `cleanup.json`.
 - Commit messages: imperative subject, no attribution trailers.
-- The repository follows `docket/CONTRACT.md` and the Docket section of `AGENTS.md`; this plan is implemented on a branch through a PR, not on `main`.
+- The repository follows `docket/CONTRACT.md` and the Docket section of
+  `AGENTS.md`; this plan is implemented on a branch through a PR, not on
+  `main`.
 
 ## Review Focus
 
-1. **README containing raw HTML or `<script>`** must render escaped, not as live markup. Test in Task 6.
-2. **Relative links and images in a README** (`docs/x.md`, `../y`, `img.png`, `sub/`) must point at the right `blob/`, `tree/` or `raw/` URL for the directory the README sits in, and links that escape the project root are left unchanged. Test in Task 6.
-3. **File names with spaces, `#`, `?`, `%` or non-ASCII characters** must produce working, percent-encoded links and be stored under their real names. Test in Task 7.
-4. **Symlinks in a project**, including ones pointing outside it, are shown as link text and never followed. Test in Task 7.
-5. **Running `partlet build` twice with no changes** reports `unchanged`, uploads no new pack, and leaves a cloneable repo. Test in Task 9.
+1. **README containing raw HTML or `<script>`** must render escaped, not
+   as live markup. Test in Task 6.
+1. **Relative links and images in a README** (`docs/x.md`, `../y`,
+   `img.png`, `sub/`) must point at the right `blob/`, `tree/` or `raw/`
+   URL for the directory the README sits in, and links that escape the
+   project root are left unchanged. Test in Task 6.
+1. **File names with spaces, `#`, `?`, `%` or non-ASCII characters**
+   must produce working, percent-encoded links and be stored under their
+   real names. Test in Task 7.
+1. **Symlinks in a project**, including ones pointing outside it, are
+   shown as link text and never followed. Test in Task 7.
+1. **Running `partlet build` twice with no changes** reports
+   `unchanged`, uploads no new pack, and leaves a cloneable repo. Test
+   in Task 9.
 
-Also guarded, with tests in the owning tasks: shallow monorepo clones (Task 2), neighbouring directories with a shared prefix such as `tools/foo` and `tools/foobar` (Task 2), and unknown manifest keys such as a misspelt `previous_path` (Task 1).
+Also guarded, with tests in the owning tasks: shallow monorepo clones
+(Task 2), neighbouring directories with a shared prefix such as
+`tools/foo` and `tools/foobar` (Task 2), and unknown manifest keys such
+as a misspelt `previous_path` (Task 1).
 
----
+______________________________________________________________________
 
 ## File structure
 
@@ -101,28 +151,38 @@ tests/
   test_cli.py
 ```
 
----
+______________________________________________________________________
 
 ### Task 1: Project scaffolding and manifest
 
 **Files:**
-- Create: `pyproject.toml`, `src/partlet/__init__.py`, `src/partlet/manifest.py`, `scripts/fmt-check.sh`, `scripts/test.sh`, `.githooks/pre-push`
-- Modify: `scripts/setup.sh`, `scripts/check.sh`, `scripts/lint.sh`, `.githooks/pre-commit`, `.github/workflows/ci.yml`, `docs/QUALITY.md`
+
+- Create: `pyproject.toml`, `src/partlet/__init__.py`,
+  `src/partlet/manifest.py`, `scripts/fmt-check.sh`, `scripts/test.sh`,
+  `.githooks/pre-push`
+- Modify: `scripts/setup.sh`, `scripts/check.sh`, `scripts/lint.sh`,
+  `.githooks/pre-commit`, `.github/workflows/ci.yml`, `docs/QUALITY.md`
 - Test: `tests/test_manifest.py`
 
 **Interfaces:**
+
 - Consumes: nothing.
+
 - Produces:
+
   - `partlet.__version__: str`
   - `class ManifestError(Exception)`
   - `@dataclass(frozen=True) class Site(source: str, branch: str, base_url: str, mailmap: str | None)`
-  - `@dataclass(frozen=True) class Project(name: str, path: str, previous_paths: tuple[str, ...], description: str, approved: str | None, allow_rewrite_of: str | None)` with property `all_paths -> tuple[str, ...]` (path first)
+  - `@dataclass(frozen=True) class Project(name: str, path: str, previous_paths: tuple[str, ...], description: str, approved: str | None, allow_rewrite_of: str | None)`
+    with property `all_paths -> tuple[str, ...]` (path first)
   - `@dataclass(frozen=True) class Manifest(site: Site, projects: dict[str, Project])`
-  - `parse_manifest(text: str) -> Manifest`, `load_manifest(path: Path) -> Manifest`
+  - `parse_manifest(text: str) -> Manifest`,
+    `load_manifest(path: Path) -> Manifest`
 
 - [ ] **Step 1: Create the packaging files and virtualenv**
 
-The repository already has a `.gitignore` covering `.venv/`, Python caches and build output; leave it as is.
+The repository already has a `.gitignore` covering `.venv/`, Python
+caches and build output; leave it as is.
 
 `pyproject.toml`:
 
@@ -168,7 +228,10 @@ pythonpath = ["tests"]
 __version__ = "0.1.0"
 ```
 
-In `scripts/setup.sh`, replace the line `# Python and Worker dependencies are added here as those components land.` with `# Worker dependencies are added here when the Worker lands.`, and insert this block after `cd "$(dirname "$0")/.."`:
+In `scripts/setup.sh`, replace the line
+`# Python and Worker dependencies are added here as those components land.`
+with `# Worker dependencies are added here when the Worker lands.`, and
+insert this block after `cd "$(dirname "$0")/.."`:
 
 ```bash
 # Python: a virtualenv per worktree with the package installed editable.
@@ -180,7 +243,9 @@ uv pip install --quiet --python .venv/bin/python -e '.[dev]'
 
 Run: `bash scripts/setup.sh`
 
-Expected: `setup: done.`; `.venv/bin/python -c "import partlet; print(partlet.__version__)"` prints `0.1.0`.
+Expected: `setup: done.`;
+`.venv/bin/python -c "import partlet; print(partlet.__version__)"`
+prints `0.1.0`.
 
 - [ ] **Step 2: Write the failing manifest tests**
 
@@ -286,8 +351,8 @@ def test_invalid_toml():
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_manifest.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.manifest'`.
+Run: `.venv/bin/pytest tests/test_manifest.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.manifest'`.
 
 - [ ] **Step 4: Implement the manifest module**
 
@@ -447,8 +512,7 @@ def _parse_project(name: str, raw: Any) -> Project:
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_manifest.py -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest tests/test_manifest.py -v` Expected: all PASS.
 
 - [ ] **Step 6: Wire the Python gates into the docket scripts**
 
@@ -484,7 +548,8 @@ In `scripts/lint.sh`, change the header comment to:
 # here. Extra arguments go to ruff.
 ```
 
-and replace the last two lines (`shellcheck "$@" "${files[@]}"` and the `echo`) with:
+and replace the last two lines (`shellcheck "$@" "${files[@]}"` and the
+`echo`) with:
 
 ```bash
 shellcheck "${files[@]}"
@@ -492,9 +557,12 @@ echo "lint: ${#files[@]} shell scripts clean"
 .venv/bin/ruff check "$@" src tests
 ```
 
-In `scripts/check.sh`, replace `gates=(lint)` with `gates=(fmt-check lint test)`.
+In `scripts/check.sh`, replace `gates=(lint)` with
+`gates=(fmt-check lint test)`.
 
-The test suite clones real repositories, so it moves off the commit hook. Replace the body of `.githooks/pre-commit` after `cd "$(git rev-parse --show-toplevel)"` with:
+The test suite clones real repositories, so it moves off the commit
+hook. Replace the body of `.githooks/pre-commit` after
+`cd "$(git rev-parse --show-toplevel)"` with:
 
 ```bash
 bash scripts/fmt-check.sh
@@ -503,7 +571,8 @@ bash docket/scripts/check-queues.sh --strict
 bash docket/scripts/check-links.sh
 ```
 
-and change its header comment's first line to `# Fast gates on the whole working tree, not just the staged files; it only`.
+and change its header comment's first line to
+`# Fast gates on the whole working tree, not just the staged files; it only`.
 
 `.githooks/pre-push`:
 
@@ -516,7 +585,8 @@ cd "$(git rev-parse --show-toplevel)"
 bash scripts/check.sh
 ```
 
-In `.github/workflows/ci.yml`, in the `check` job, replace the comment above `- run: bash scripts/setup.sh` with:
+In `.github/workflows/ci.yml`, in the `check` job, replace the comment
+above `- run: bash scripts/setup.sh` with:
 
 ```yaml
       # shellcheck is preinstalled on ubuntu-latest; uv provides Python.
@@ -525,7 +595,8 @@ In `.github/workflows/ci.yml`, in the `check` job, replace the comment above `- 
 
 In `docs/QUALITY.md`:
 
-- Replace the `scripts/lint.sh` and `scripts/check.sh` rows of the gates table with:
+- Replace the `scripts/lint.sh` and `scripts/check.sh` rows of the gates
+  table with:
 
   ```markdown
   | `scripts/fmt-check.sh` | `ruff format --check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
@@ -534,12 +605,32 @@ In `docs/QUALITY.md`:
   | `scripts/check.sh` | the gates in its `gates` array, in order: `fmt-check`, `lint`, `test` | | yes | yes | yes | |
   ```
 
-- Replace the sentence starting "There is no Python or Worker code yet" with: "There is no Worker code yet, so it has no gates; they join `scripts/check.sh`, `ci.yml` and this table in the PR that adds the Worker."
-- Replace the hooks paragraph with: "Hooks are a tracked `.githooks/` directory, wired with `git config core.hooksPath .githooks` by `bash scripts/setup.sh`. Pre-commit runs the format check, lint and the queue and link validators on the whole working tree; it only checks and never rewrites files. Pre-push runs `bash scripts/check.sh`, including the test suite. Bypassing a hook is for a broken toolchain only; state the bypass and the equivalent checks in the PR."
-- Replace "Toolchain pins: none yet." with: "Toolchain pins: Python 3.12 (`scripts/setup.sh`); dependency floors in `pyproject.toml`. Bumping a pin is its own PR."
-- In Review inputs, replace "Baseline commands beyond `bash scripts/check.sh`: none yet." with "Baseline commands beyond `bash scripts/check.sh`: `partlet build --out <dir>` against a synthetic monorepo, then `git clone` from that directory served over HTTP."
+- Replace the sentence starting "There is no Python or Worker code yet"
+  with: "There is no Worker code yet, so it has no gates; they join
+  `scripts/check.sh`, `ci.yml` and this table in the PR that adds the
+  Worker."
 
-Run: `chmod +x scripts/*.sh .githooks/*`, then `.venv/bin/ruff format src tests` and `bash scripts/check.sh`
+- Replace the hooks paragraph with: "Hooks are a tracked `.githooks/`
+  directory, wired with `git config core.hooksPath .githooks` by
+  `bash scripts/setup.sh`. Pre-commit runs the format check, lint and
+  the queue and link validators on the whole working tree; it only
+  checks and never rewrites files. Pre-push runs
+  `bash scripts/check.sh`, including the test suite. Bypassing a hook is
+  for a broken toolchain only; state the bypass and the equivalent
+  checks in the PR."
+
+- Replace "Toolchain pins: none yet." with: "Toolchain pins: Python 3.12
+  (`scripts/setup.sh`); dependency floors in `pyproject.toml`. Bumping a
+  pin is its own PR."
+
+- In Review inputs, replace "Baseline commands beyond
+  `bash scripts/check.sh`: none yet." with "Baseline commands beyond
+  `bash scripts/check.sh`: `partlet build --out <dir>` against a
+  synthetic monorepo, then `git clone` from that directory served over
+  HTTP."
+
+Run: `chmod +x scripts/*.sh .githooks/*`, then
+`.venv/bin/ruff format src tests` and `bash scripts/check.sh`
 
 Expected: `check: all gates passed`.
 
@@ -551,24 +642,37 @@ git add pyproject.toml src/partlet/__init__.py src/partlet/manifest.py tests/tes
 git commit -m "Add package scaffolding, manifest parser and Python gates"
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: Git helpers, test repo builder, and export
 
 **Files:**
-- Create: `src/partlet/gitutil.py`, `src/partlet/export.py`, `tests/helpers.py`, `tests/conftest.py`
+
+- Create: `src/partlet/gitutil.py`, `src/partlet/export.py`,
+  `tests/helpers.py`, `tests/conftest.py`
 - Test: `tests/test_export.py`
 
 **Interfaces:**
+
 - Consumes: `Project` from Task 1.
+
 - Produces:
+
   - `class GitError(Exception)`
-  - `git(*args: str, cwd: Path, input: bytes | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[bytes]` (raises `GitError` on non-zero exit)
-  - `git_out(*args: str, cwd: Path, input: bytes | None = None) -> str` (stdout, decoded, stripped)
+  - `git(*args: str, cwd: Path, input: bytes | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[bytes]`
+    (raises `GitError` on non-zero exit)
+  - `git_out(*args: str, cwd: Path, input: bytes | None = None) -> str`
+    (stdout, decoded, stripped)
   - `run_filter_repo(*args: str, cwd: Path) -> None`
   - `class ExportError(Exception)`
-  - `export_project(monorepo: Path, branch: str, project: Project, dest: Path, mailmap: Path | None = None) -> str` (returns the export tip SHA; `dest` is a bare repo whose only ref is `refs/heads/main`)
-  - tests: `helpers.Repo(path)` with `.write(rel, content)`, `.mv(src, dst)`, `.rm(rel)`, `.commit(message) -> str`, `.path`; `helpers.serve_directory(root) -> ContextManager[str]` (base URL); conftest fixtures `mono` (a fresh `Repo`) and `serve` (the `serve_directory` function).
+  - `export_project(monorepo: Path, branch: str, project: Project, dest: Path, mailmap: Path | None = None) -> str`
+    (returns the export tip SHA; `dest` is a bare repo whose only ref is
+    `refs/heads/main`)
+  - tests: `helpers.Repo(path)` with `.write(rel, content)`,
+    `.mv(src, dst)`, `.rm(rel)`, `.commit(message) -> str`, `.path`;
+    `helpers.serve_directory(root) -> ContextManager[str]` (base URL);
+    conftest fixtures `mono` (a fresh `Repo`) and `serve` (the
+    `serve_directory` function).
 
 - [ ] **Step 1: Write the git helpers**
 
@@ -720,7 +824,8 @@ def serve():
     return serve_directory
 ```
 
-`helpers` is importable from tests because Task 1 set `pythonpath = ["tests"]` in `pyproject.toml`.
+`helpers` is importable from tests because Task 1 set
+`pythonpath = ["tests"]` in `pyproject.toml`.
 
 - [ ] **Step 3: Write the failing export tests**
 
@@ -837,8 +942,8 @@ def test_mailmap_rewrites_author(mono, tmp_path):
 
 - [ ] **Step 4: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_export.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.export'`.
+Run: `.venv/bin/pytest tests/test_export.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.export'`.
 
 - [ ] **Step 5: Implement export**
 
@@ -911,12 +1016,16 @@ def _object_type(repo: Path, rev: str) -> str | None:
         return None
 ```
 
-Note: `--replace-refs delete-no-add` stops filter-repo from leaving `refs/replace/*` behind, which would otherwise be published as extra refs.
+Note: `--replace-refs delete-no-add` stops filter-repo from leaving
+`refs/replace/*` behind, which would otherwise be published as extra
+refs.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_export.py -v`
-Expected: all PASS. `test_export_keeps_only_project_files_at_root` also proves `tools/foobar` is excluded, because `--path tools/foo/` carries a trailing slash.
+Run: `.venv/bin/pytest tests/test_export.py -v` Expected: all PASS.
+`test_export_keeps_only_project_files_at_root` also proves
+`tools/foobar` is excluded, because `--path tools/foo/` carries a
+trailing slash.
 
 - [ ] **Step 7: Commit**
 
@@ -925,20 +1034,26 @@ git add src/partlet/gitutil.py src/partlet/export.py tests/helpers.py tests/conf
 git commit -m "Export project history with git filter-repo"
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: History checks
 
 **Files:**
+
 - Create: `src/partlet/history.py`
 - Test: `tests/test_history.py`
 
 **Interfaces:**
-- Consumes: `git` from Task 2; `export_project` and `helpers.Repo` in tests.
+
+- Consumes: `git` from Task 2; `export_project` and `helpers.Repo` in
+  tests.
+
 - Produces:
+
   - `class HistoryError(Exception)`
   - `@dataclass(frozen=True) class Decision(action: Literal["publish", "unchanged", "rewrite"], reason: str)`
-  - `is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool` (false if `ancestor` is not in `repo`)
+  - `is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool`
+    (false if `ancestor` is not in `repo`)
   - `check_history(repo: Path, new_tip: str, published_tip: str | None, approved: str | None, allow_rewrite_of: str | None) -> Decision`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1022,8 +1137,8 @@ def test_allow_rewrite_still_requires_approval_ancestry(chain):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_history.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.history'`.
+Run: `.venv/bin/pytest tests/test_history.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.history'`.
 
 - [ ] **Step 3: Implement**
 
@@ -1090,8 +1205,7 @@ def check_history(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_history.py -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest tests/test_history.py -v` Expected: all PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1100,19 +1214,30 @@ git add src/partlet/history.py tests/test_history.py
 git commit -m "Add approval and fast-forward history checks"
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Store interface and local directory store
 
 **Files:**
+
 - Create: `src/partlet/store.py`
 - Test: `tests/test_store.py`
 
 **Interfaces:**
+
 - Consumes: nothing.
+
 - Produces:
-  - `class Store(Protocol)` with `get(key: str) -> bytes | None`, `put(key: str, data: bytes, content_type: str | None = None) -> None`, `delete(key: str) -> None` (missing keys are fine), `list(prefix: str) -> list[str]` (all keys starting with `prefix`, sorted), `list_dirs(prefix: str) -> list[str]` (immediate child "directory" names under `prefix`, which must end in `/`, sorted)
-  - `class LocalStore(root: Path)` implementing `Store`; rejects keys that are empty, absolute, or contain empty, `.` or `..` segments with `ValueError`.
+
+  - `class Store(Protocol)` with `get(key: str) -> bytes | None`,
+    `put(key: str, data: bytes, content_type: str | None = None) -> None`,
+    `delete(key: str) -> None` (missing keys are fine),
+    `list(prefix: str) -> list[str]` (all keys starting with `prefix`,
+    sorted), `list_dirs(prefix: str) -> list[str]` (immediate child
+    "directory" names under `prefix`, which must end in `/`, sorted)
+  - `class LocalStore(root: Path)` implementing `Store`; rejects keys
+    that are empty, absolute, or contain empty, `.` or `..` segments
+    with `ValueError`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1161,8 +1286,8 @@ def test_rejects_bad_keys(tmp_path, key):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_store.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.store'`.
+Run: `.venv/bin/pytest tests/test_store.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.store'`.
 
 - [ ] **Step 3: Implement**
 
@@ -1241,8 +1366,7 @@ class LocalStore:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_store.py -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest tests/test_store.py -v` Expected: all PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1251,23 +1375,33 @@ git add src/partlet/store.py tests/test_store.py
 git commit -m "Add Store interface and local directory store"
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Dumb-HTTP packs and pointers
 
 **Files:**
+
 - Create: `src/partlet/gitstatic.py`
 - Test: `tests/test_gitstatic.py`
 
 **Interfaces:**
-- Consumes: `git_out` (Task 2), `Store`/`LocalStore` (Task 4), `export_project` and `helpers` in tests.
+
+- Consumes: `git_out` (Task 2), `Store`/`LocalStore` (Task 4),
+  `export_project` and `helpers` in tests.
+
 - Produces:
+
   - `MAX_PACKS = 20`
-  - `@dataclass(frozen=True) class GitState(tip: str | None, packs: tuple[str, ...])` (pack names like `pack-<hash>`, no extension)
-  - `@dataclass(frozen=True) class PackPlan(tip: str, packs: tuple[str, ...], superseded: tuple[str, ...])` (`superseded` are store keys no longer referenced after this publish)
+  - `@dataclass(frozen=True) class GitState(tip: str | None, packs: tuple[str, ...])`
+    (pack names like `pack-<hash>`, no extension)
+  - `@dataclass(frozen=True) class PackPlan(tip: str, packs: tuple[str, ...], superseded: tuple[str, ...])`
+    (`superseded` are store keys no longer referenced after this
+    publish)
   - `read_state(store: Store, git_prefix: str) -> GitState`
-  - `upload_pack(store: Store, git_prefix: str, repo: Path, new_tip: str, old: GitState, workdir: Path, full: bool = False) -> PackPlan` (uploads pack files only)
-  - `write_pointers(store: Store, git_prefix: str, plan: PackPlan) -> None` (writes `objects/info/packs`, `info/refs`, `HEAD`, in that order)
+  - `upload_pack(store: Store, git_prefix: str, repo: Path, new_tip: str, old: GitState, workdir: Path, full: bool = False) -> PackPlan`
+    (uploads pack files only)
+  - `write_pointers(store: Store, git_prefix: str, plan: PackPlan) -> None`
+    (writes `objects/info/packs`, `info/refs`, `HEAD`, in that order)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1350,8 +1484,8 @@ def test_full_pack_never_supersedes_itself(mono, tmp_path):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_gitstatic.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.gitstatic'`.
+Run: `.venv/bin/pytest tests/test_gitstatic.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.gitstatic'`.
 
 - [ ] **Step 3: Implement**
 
@@ -1441,8 +1575,10 @@ def write_pointers(store: Store, git_prefix: str, plan: PackPlan) -> None:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_gitstatic.py -v`
-Expected: all PASS. The clone test runs real `git clone` and `git pull` against `http.server`, which returns `info/refs` as a plain file, so git uses the dumb protocol.
+Run: `.venv/bin/pytest tests/test_gitstatic.py -v` Expected: all PASS.
+The clone test runs real `git clone` and `git pull` against
+`http.server`, which returns `info/refs` as a plain file, so git uses
+the dumb protocol.
 
 - [ ] **Step 5: Commit**
 
@@ -1451,25 +1587,40 @@ git add src/partlet/gitstatic.py tests/test_gitstatic.py
 git commit -m "Write incremental packs and dumb-HTTP pointers"
 ```
 
----
+______________________________________________________________________
 
 ### Task 6: Site content helpers (tree, URLs, links, Markdown, highlighting)
 
 **Files:**
-- Create: `src/partlet/site/__init__.py`, `src/partlet/site/tree.py`, `src/partlet/site/urls.py`, `src/partlet/site/links.py`, `src/partlet/site/markdown.py`, `src/partlet/site/highlight.py`
+
+- Create: `src/partlet/site/__init__.py`, `src/partlet/site/tree.py`,
+  `src/partlet/site/urls.py`, `src/partlet/site/links.py`,
+  `src/partlet/site/markdown.py`, `src/partlet/site/highlight.py`
 - Test: `tests/test_site_content.py`
 
 **Interfaces:**
+
 - Consumes: `git` (Task 2).
+
 - Produces:
+
   - `SIZE_CAP = 1024 * 1024`
-  - `@dataclass(frozen=True) class FileEntry(path: str, data: bytes, is_symlink: bool = False)` with properties `name: str`, `parent: str` (`""` at root), `size: int`
-  - `read_tree(repo: Path, tip: str) -> list[FileEntry]` (sorted by path; submodules skipped; symlink `data` is the link target)
-  - `is_binary(data: bytes) -> bool`, `is_viewable(entry: FileEntry) -> bool`
-  - `urls.tree_url(project: str, directory: str) -> str`, `urls.blob_url(project, path) -> str`, `urls.raw_url(project, path) -> str`, `urls.archive_url(project, fmt) -> str`
-  - `class Linker(project: str, files: set[str], dirs: set[str])` with `resolve(base_dir: str, href: str, raw: bool = False) -> str`
+  - `@dataclass(frozen=True) class FileEntry(path: str, data: bytes, is_symlink: bool = False)`
+    with properties `name: str`, `parent: str` (`""` at root),
+    `size: int`
+  - `read_tree(repo: Path, tip: str) -> list[FileEntry]` (sorted by
+    path; submodules skipped; symlink `data` is the link target)
+  - `is_binary(data: bytes) -> bool`,
+    `is_viewable(entry: FileEntry) -> bool`
+  - `urls.tree_url(project: str, directory: str) -> str`,
+    `urls.blob_url(project, path) -> str`,
+    `urls.raw_url(project, path) -> str`,
+    `urls.archive_url(project, fmt) -> str`
+  - `class Linker(project: str, files: set[str], dirs: set[str])` with
+    `resolve(base_dir: str, href: str, raw: bool = False) -> str`
   - `render_markdown(text: str, base_dir: str, linker: Linker) -> str`
-  - `highlight_file(path: str, text: str) -> str`, `pygments_css() -> str`
+  - `highlight_file(path: str, text: str) -> str`,
+    `pygments_css() -> str`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1572,8 +1723,8 @@ def test_highlight():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_site_content.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.site'`.
+Run: `.venv/bin/pytest tests/test_site_content.py -v` Expected: FAIL
+with `ModuleNotFoundError: No module named 'partlet.site'`.
 
 - [ ] **Step 3: Implement**
 
@@ -1791,8 +1942,8 @@ def pygments_css() -> str:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_site_content.py -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest tests/test_site_content.py -v` Expected: all
+PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1801,20 +1952,31 @@ git add src/partlet/site tests/test_site_content.py
 git commit -m "Add tree reading, link rewriting, Markdown and highlighting"
 ```
 
----
+______________________________________________________________________
 
 ### Task 7: Page rendering and templates
 
 **Files:**
-- Create: `src/partlet/site/render.py`, `src/partlet/site/style.css`, `src/partlet/site/templates/base.html`, `src/partlet/site/templates/tree.html`, `src/partlet/site/templates/blob.html`, `src/partlet/site/templates/index.html`
+
+- Create: `src/partlet/site/render.py`, `src/partlet/site/style.css`,
+  `src/partlet/site/templates/base.html`,
+  `src/partlet/site/templates/tree.html`,
+  `src/partlet/site/templates/blob.html`,
+  `src/partlet/site/templates/index.html`
 - Test: `tests/test_render.py`
 
 **Interfaces:**
+
 - Consumes: everything in Task 6.
+
 - Produces:
+
   - `@dataclass(frozen=True) class ProjectInfo(name: str, description: str, tip: str, base_url: str, updated: str)`
-  - `render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, bytes]` with keys `index.html`, `tree/<dir>/index.html`, `blob/<path>`, `raw/<path>`
-  - `render_site_index(base_url: str, projects: list[dict]) -> bytes` (each dict has `name`, `description`, `tip`, `updated`)
+  - `render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, bytes]`
+    with keys `index.html`, `tree/<dir>/index.html`, `blob/<path>`,
+    `raw/<path>`
+  - `render_site_index(base_url: str, projects: list[dict]) -> bytes`
+    (each dict has `name`, `description`, `tip`, `updated`)
   - `site_stylesheet() -> bytes`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1918,8 +2080,8 @@ def test_stylesheet_includes_pygments():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_render.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.site.render'`.
+Run: `.venv/bin/pytest tests/test_render.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.site.render'`.
 
 - [ ] **Step 3: Write the templates and stylesheet**
 
@@ -2160,7 +2322,10 @@ def site_stylesheet() -> bytes:
     return (base + "\n" + pygments_css() + "\n").encode("utf-8")
 ```
 
-Note: `render.py` imports `ARCHIVE_FORMATS` from `partlet.archive`, which Task 8 creates. To keep this task self-contained, create `src/partlet/archive.py` now with only the constant, and Task 8 adds the function:
+Note: `render.py` imports `ARCHIVE_FORMATS` from `partlet.archive`,
+which Task 8 creates. To keep this task self-contained, create
+`src/partlet/archive.py` now with only the constant, and Task 8 adds the
+function:
 
 ```python
 """Downloadable archives of an export tip."""
@@ -2170,8 +2335,7 @@ ARCHIVE_FORMATS = ("tar.gz", "zip")
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_render.py -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest tests/test_render.py -v` Expected: all PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -2180,17 +2344,22 @@ git add src/partlet/site src/partlet/archive.py tests/test_render.py
 git commit -m "Render project pages, file views and site index"
 ```
 
----
+______________________________________________________________________
 
 ### Task 8: Archives
 
 **Files:**
+
 - Modify: `src/partlet/archive.py`
 - Test: `tests/test_archive.py`
 
 **Interfaces:**
+
 - Consumes: `git` (Task 2), `ARCHIVE_FORMATS` (Task 7).
-- Produces: `make_archives(repo: Path, name: str, tip: str) -> dict[str, bytes]`, keyed by format (`"tar.gz"`, `"zip"`).
+
+- Produces:
+  `make_archives(repo: Path, name: str, tip: str) -> dict[str, bytes]`,
+  keyed by format (`"tar.gz"`, `"zip"`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2228,8 +2397,8 @@ def test_archives_contain_prefixed_files_and_are_deterministic(mono, tmp_path):
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `.venv/bin/pytest tests/test_archive.py -v`
-Expected: FAIL with `ImportError: cannot import name 'make_archives'`.
+Run: `.venv/bin/pytest tests/test_archive.py -v` Expected: FAIL with
+`ImportError: cannot import name 'make_archives'`.
 
 - [ ] **Step 3: Implement**
 
@@ -2256,8 +2425,7 @@ def make_archives(repo: Path, name: str, tip: str) -> dict[str, bytes]:
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `.venv/bin/pytest tests/test_archive.py -v`
-Expected: PASS.
+Run: `.venv/bin/pytest tests/test_archive.py -v` Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -2266,24 +2434,30 @@ git add src/partlet/archive.py tests/test_archive.py
 git commit -m "Build tar.gz and zip archives of the export tip"
 ```
 
----
+______________________________________________________________________
 
 ### Task 9: Publish pipeline, cleanup, site index, and `partlet build`
 
 **Files:**
+
 - Create: `src/partlet/publish.py`, `src/partlet/cli.py`
 - Test: `tests/test_publish.py`, `tests/test_cli.py`
 
 **Interfaces:**
+
 - Consumes: everything above.
+
 - Produces:
+
   - `@dataclass(frozen=True) class ProjectResult(name: str, status: Literal["published", "unchanged", "skipped", "failed"], tip: str | None = None, reason: str = "")`
-  - `project_prefix(source: str, name: str) -> str` (`"<source>/p/<name>"`)
+  - `project_prefix(source: str, name: str) -> str`
+    (`"<source>/p/<name>"`)
   - `build_id(tip: str, description: str) -> str` (16 hex chars)
   - `publish_project(monorepo: Path, manifest: Manifest, project: Project, store: Store, workdir: Path) -> ProjectResult`
   - `publish_all(monorepo: Path, manifest: Manifest, store: Store, workdir: Path) -> list[ProjectResult]`
   - `write_site_index(store: Store, site: Site) -> None`
-  - `cli.main(argv: list[str] | None = None) -> int` with subcommand `build --repo DIR --manifest FILE --out DIR`
+  - `cli.main(argv: list[str] | None = None) -> int` with subcommand
+    `build --repo DIR --manifest FILE --out DIR`
 
 - [ ] **Step 1: Write the failing pipeline tests**
 
@@ -2453,8 +2627,8 @@ def test_missing_directory_fails_project_but_index_still_written(mono, tmp_path,
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_publish.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.publish'`.
+Run: `.venv/bin/pytest tests/test_publish.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.publish'`.
 
 - [ ] **Step 3: Implement the pipeline**
 
@@ -2601,12 +2775,13 @@ def publish_all(monorepo: Path, manifest: Manifest, store: Store, workdir: Path)
     return results
 ```
 
-Content types on `put` are ignored by `LocalStore`; the R2 store in plan 3 uses them. Site pages and raw files are stored without a type here; the Worker assigns types on the way out (plan 2).
+Content types on `put` are ignored by `LocalStore`; the R2 store in plan
+3 uses them. Site pages and raw files are stored without a type here;
+the Worker assigns types on the way out (plan 2).
 
 - [ ] **Step 4: Run the pipeline tests to verify they pass**
 
-Run: `.venv/bin/pytest tests/test_publish.py -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest tests/test_publish.py -v` Expected: all PASS.
 
 - [ ] **Step 5: Write the failing CLI test**
 
@@ -2665,8 +2840,8 @@ def test_bad_manifest_exit_code(mono, tmp_path, capsys):
 
 - [ ] **Step 6: Run the CLI tests to verify they fail**
 
-Run: `.venv/bin/pytest tests/test_cli.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'partlet.cli'`.
+Run: `.venv/bin/pytest tests/test_cli.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'partlet.cli'`.
 
 - [ ] **Step 7: Implement the CLI**
 
@@ -2724,8 +2899,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 8: Run the whole suite**
 
-Run: `.venv/bin/pytest -v`
-Expected: all PASS.
+Run: `.venv/bin/pytest -v` Expected: all PASS.
 
 - [ ] **Step 9: Commit**
 
