@@ -11,9 +11,3 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 ## P3 Low
 
 ## Unprioritized
-
-- [PUBLISHER] `export-colon-path-validation` — **Handle colon paths.** Support colon-containing project paths or reject them before export. Manifest normalization accepts paths that filter-repo's path-rename syntax cannot use.
-
-  - Source: review/2026-11-03-1933-full.md, 2026-11-03
-  - Starting point: `normalize_path` in `src/partlet/manifest.py` and `export_project` in `src/partlet/export.py`; reproduce with `foo:bar`.
-  - Findings: `export-colon-path-rename`
