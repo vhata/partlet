@@ -26,6 +26,12 @@ def export_project(
     creates its own repository. A caller that exports the same project twice
     needs a fresh `dest` each time.
     """
+    # Direct callers can construct Project without manifest validation.
+    for path in project.all_paths:
+        if ":" in path:
+            raise ExportError(
+                f"project path {path!r} contains a colon; use project paths without ':'"
+            )
     dest = dest.resolve()
     if dest.exists():
         raise ExportError(f"export destination {dest} already exists")
