@@ -140,8 +140,11 @@ For each project:
 ### Stable commit identities
 
 Given the same monorepo history, path list, mailmap, and tool versions, the
-export produces identical commit hashes. The git and filter-repo versions are
-pinned in the action. A test runs the same export twice and compares hashes.
+export produces identical commit hashes. The Action pins filter-repo, while
+Git comes from the runner image; its minimum version is checked and its
+actual version is recorded. Identical hashes across different Git versions
+are not established. A test repeats an export with the same tools and
+compares hashes. See [toolchain validation](../QUALITY.md#gates).
 
 New commits in the monorepo append to the export without changing earlier
 export commits, as long as the path list and mailmap are unchanged.

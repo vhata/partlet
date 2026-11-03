@@ -122,7 +122,10 @@ Deferred until there is code worth an extended run; see the Docket section of `A
 
 ## Branch protection
 
-Not configured yet. The settings are recorded here once the user applies them.
+The `main` branch requires `check` and `Queue and PR hygiene`. Requiring
+the branch to be up to date before merging is disabled. No approving
+review count is required, and administrators are exempt. These settings
+were verified on 2026-11-03; changes remain the user's decision.
 
 ## PR evidence
 
