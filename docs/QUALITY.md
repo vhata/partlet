@@ -16,8 +16,8 @@ Each check is a standalone script in `scripts/` or `docket/scripts/`, runnable f
 
 | Script | Runs | Pre-commit | Pre-push | CI on PR | CI on main | Scheduled |
 | --- | --- | --- | --- | --- | --- | --- |
-| `scripts/fmt-check.sh` | `ruff format --check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
-| `scripts/lint.sh` | shellcheck over `scripts/*.sh` and `.githooks/*`, then `ruff check` over `src` and `tests` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/fmt-check.sh` | `ruff format --check` over `src`, `tests` and `action` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
+| `scripts/lint.sh` | shellcheck over `scripts/*.sh`, `action/*.sh` and `.githooks/*`, then `ruff check` over `src`, `tests` and `action` | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/test.sh` | pytest; fails on an empty collection | | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/worker-lint.sh` | Biome format/lint and smoke-driver Ruff | yes | via `check.sh` | via `check.sh` | via `check.sh` | |
 | `scripts/worker-typecheck.sh` | generated Wrangler types, source and test TypeScript | | via `check.sh` | via `check.sh` | via `check.sh` | |
@@ -41,7 +41,11 @@ Toolchain pins: Python 3.12 (`scripts/setup.sh`); git 2.31 or newer
 8.30.1 exactly, installed by `scripts/install-gitleaks.sh` with a SHA-256
 per platform. Setup runs the installer, so the CI `check` job downloads
 the pinned scanner. Other Python dependencies have floors in
-`pyproject.toml`.
+`pyproject.toml`. The Action installs hash-locked wheels from
+`action/requirements.txt` and uses the code in its own selected checkout.
+Its uv download is pinned to 0.13.5 with per-architecture checksums and
+Actions caching disabled. Regenerate the lock using the command in the
+[README](../README.md#development-and-validation).
 The tool checks record the actual Git version; they do not establish
 identical export hashes across different Git versions. Worker pins: Node
 in `worker/.node-version`; exact npm dependencies and install-script
@@ -77,11 +81,21 @@ Read by `docket/CODE_REVIEW_GUIDE.md`, which links this section by its heading, 
 - Baseline commands beyond `bash scripts/check.sh`: `partlet build --out <dir>` against a synthetic monorepo, then `git clone` from that directory served over HTTP. Exercise `partlet publish` against the moto fixture's loopback endpoint for the R2 path; the normal suite includes full interruption/retry checks.
 - Drift checks for an incremental review: this document against `.githooks/`, `scripts/` and `.github/workflows/`; plan status in `plans/` against merged work.
 - Source paths for `bash docket/scripts/review-due.sh --paths "src worker scripts"`.
-- Expected tracked files: Markdown, shell scripts, YAML under `.github/`, `.githooks/*`, `LICENSE`, `.gitignore`; Python, TOML, TypeScript, JSON, HTML and CSS once the publisher and Worker land.
+- Expected tracked files: Markdown, shell scripts, YAML under `.github/`, `.githooks/*`, `LICENSE`, `.gitignore`; Python, TOML, TypeScript, JSON, HTML and CSS, plus `action.yml`,
+  `action/requirements.txt` and the consumer example in `examples/`.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on pull requests and on pushes to `main`. Jobs: `check` (runs `bash scripts/setup.sh` then `bash scripts/check.sh`) and `Queue and PR hygiene` (runs `bash docket/scripts/ci.sh`; on pull requests its marker check compares the queues at the base branch tip with the checked-out merge commit). Superseded runs are cancelled on PR branches only, never on `main`.
+
+The `Action smoke test` job runs the composite Action itself against an
+approved synthetic source on a detached checkout with no local publishing
+branch. It installs locked wheels and checksum-verified tools, creates the
+missing branch and publishes to a local store. Private shadow modules
+fail if imported. Default Python tests also run the actual prepare and
+publish shell steps, including the R2 backend against loopback S3,
+committed approval, shallow/incorrect branches and consumer concurrency.
+No cloud secrets or deployed Worker are used.
 
 ## Scheduled validation of main
 

@@ -1,0 +1,78 @@
+name: Partlet publish
+description: Publish approved monorepo projects to a read-only Partlet site.
+inputs:
+  account-id:
+    description: Cloudflare account ID, passed from a secret.
+    required: false
+  access-key-id:
+    description: R2 access key scoped to the publishing bucket.
+    required: false
+  secret-access-key:
+    description: Matching R2 secret access key.
+    required: false
+  bucket:
+    description: Existing R2 bucket name.
+    required: false
+  endpoint:
+    description: Optional R2 S3 endpoint override (jurisdiction or local testing).
+    default: ''
+  repo:
+    description: Source repository checkout path.
+    default: '.'
+  manifest:
+    description: Manifest path relative to repo.
+    default: partlet.toml
+  local-out:
+    description: Test only; scan and build to a local store without R2.
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Check runner
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$(uname -s)-$(uname -m)" in
+          Linux-x86_64|Linux-aarch64|Linux-arm64) ;;
+          *) echo '::error::Partlet supports Linux x64 and ARM64 runners'; exit 1 ;;
+        esac
+    - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      with:
+        version: '0.13.5'
+        checksum: ${{ runner.arch == 'ARM64' && '4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403' || 'f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f' }}
+        working-directory: ${{ github.action_path }}
+        enable-cache: 'false'
+    - id: install
+      name: Install locked dependencies and verified tools
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        bash "$ACTION_PATH/action/install.sh"
+    - name: Prepare publishing checkout
+      shell: bash
+      working-directory: ${{ inputs.repo }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PY: ${{ steps.install.outputs.python }}
+        MANIFEST: ${{ inputs.manifest }}
+      run: |
+        set -euo pipefail
+        "$PY" -I "$ACTION_PATH/action/run.py" prepare
+    - name: Publish
+      shell: bash
+      working-directory: ${{ inputs.repo }}
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PY: ${{ steps.install.outputs.python }}
+        MANIFEST: ${{ inputs.manifest }}
+        LOCAL_OUT: ${{ inputs.local-out }}
+        PARTLET_R2_ACCOUNT_ID: ${{ inputs.account-id }}
+        PARTLET_R2_ACCESS_KEY_ID: ${{ inputs.access-key-id }}
+        PARTLET_R2_SECRET_ACCESS_KEY: ${{ inputs.secret-access-key }}
+        PARTLET_R2_BUCKET: ${{ inputs.bucket }}
+        PARTLET_R2_ENDPOINT: ${{ inputs.endpoint }}
+      run: |
+        set -euo pipefail
+        exec "$PY" -I "$ACTION_PATH/action/run.py" publish

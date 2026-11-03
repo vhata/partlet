@@ -1,0 +1,27 @@
+# Copy to .github/workflows/partlet.yml in the source repository.
+# Replace SOURCE and PARTLET_RELEASE_SHA with your source and reviewed release.
+name: Partlet
+on:
+  push:
+    branches: [main] # Must match site.branch in partlet.toml.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: partlet-SOURCE # Use the same group in all workflows for this source.
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: vhata/partlet@PARTLET_RELEASE_SHA
+        with:
+          account-id: ${{ secrets.PARTLET_R2_ACCOUNT_ID }}
+          access-key-id: ${{ secrets.PARTLET_R2_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.PARTLET_R2_SECRET_ACCESS_KEY }}
+          bucket: ${{ secrets.PARTLET_R2_BUCKET }}
