@@ -12,30 +12,20 @@ Only work promoted from whole-codebase reviews belongs here. Every entry is read
 
 ## Unprioritized
 
-- [PUBLISHER] `publish-retry-static-head` — **Restore Git HEAD.** A
-  successful retry of an interrupted first publication currently leaves
-  the metadata endpoint missing until the export tip advances.
+- [PUBLISHER] `publish-retry-static-head` — **Restore Git HEAD.** A successful retry of an interrupted first publication currently leaves the metadata endpoint missing until the export tip advances.
+
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
-  - Starting point: `publish_project` in `src/partlet/publish.py` and
-    `write_pointers` in `src/partlet/gitstatic.py`; interrupt before the
-    first HEAD write, then retry without advancing history.
+  - Starting point: `publish_project` in `src/partlet/publish.py` and `write_pointers` in `src/partlet/gitstatic.py`; interrupt before the first HEAD write, then retry without advancing history.
   - Findings: `publish-retry-missing-head`
 
-- [PUBLISHER] `export-colon-path-validation` — **Handle colon paths.**
-  Support colon-containing project paths or reject them before export.
-  Manifest normalization accepts paths that filter-repo's path-rename
-  syntax cannot use.
+- [PUBLISHER] `export-colon-path-validation` — **Handle colon paths.** Support colon-containing project paths or reject them before export. Manifest normalization accepts paths that filter-repo's path-rename syntax cannot use.
+
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
-  - Starting point: `normalize_path` in `src/partlet/manifest.py` and
-    `export_project` in `src/partlet/export.py`; reproduce with
-    `foo:bar`.
+  - Starting point: `normalize_path` in `src/partlet/manifest.py` and `export_project` in `src/partlet/export.py`; reproduce with `foo:bar`.
   - Findings: `export-colon-path-rename`
 
-- [TOOLING] `require-executed-python-tests` — **Run tests.**
-  Fail the Python gate when no test executes. A wholly skipped suite
-  passes despite the documented gate policy.
+- [TOOLING] `require-executed-python-tests` — **Run tests.** Fail the Python gate when no test executes. A wholly skipped suite passes despite the documented gate policy.
+
   - Source: review/2026-11-03-1933-full.md, 2026-11-03
-  - Starting point: `scripts/test.sh` and pytest session reporting in
-    `tests/conftest.py`; permit platform skips while rejecting a suite
-    containing one skipped test and no executed cases.
+  - Starting point: `scripts/test.sh` and pytest session reporting in `tests/conftest.py`; permit platform skips while rejecting a suite containing one skipped test and no executed cases.
   - Findings: `all-skipped-test-gate`

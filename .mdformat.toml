@@ -1,0 +1,5 @@
+wrap = 72
+extensions = ["gfm"]
+
+[plugin.tables]
+compact_tables = true

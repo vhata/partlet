@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Fast gates on the whole working tree, not just the staged files; it only
-# checks and never rewrites. Installed by scripts/setup.sh.
+# Format staged Markdown, then run fast gates on the whole working tree.
+# Markdown rewrites stop the commit for review; the index is never changed.
+# Installed by scripts/setup.sh.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+bash scripts/fmt-markdown.sh --staged
 bash scripts/fmt-check.sh
 bash scripts/lint.sh
 bash scripts/worker-lint.sh

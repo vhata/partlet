@@ -31,8 +31,8 @@ Action release commit, and `main` if using another publishing branch.
 Keep `fetch-depth: 0`, `persist-credentials: false`, read-only workflow
 permissions, and `cancel-in-progress: false`. All workflows publishing
 the same source must use the same concurrency group. Avoid pull-request
-triggers: publication requires HEAD at the publishing branch tip and
-an exactly committed manifest. The source lock also covers publishers
+triggers: publication requires HEAD at the publishing branch tip and an
+exactly committed manifest. The source lock also covers publishers
 outside this workflow and never expires automatically.
 
 Before publishing, use a separate Partlet checkout with Python 3.12,
@@ -47,8 +47,8 @@ bash scripts/setup.sh
 
 Inspect the report's complete history, deleted files, identities,
 messages and secret scan before answering yes. The command writes the
-exported commit as `approved` in `partlet.toml`. Commit and push that pin
-on the publishing branch. For an existing public project, omit
+exported commit as `approved` in `partlet.toml`. Commit and push that
+pin on the publishing branch. For an existing public project, omit
 `--published-tip none` so review reads its public refs. Approval never
 bypasses scanning or fast-forward enforcement. See
 [Publisher contracts](docs/PUBLISHING.md) for path moves, rewrites,
@@ -61,11 +61,11 @@ The composite Action supports Linux x64 and ARM64 runners. Use
 checksum-verified uv 0.13.5 and gitleaks 8.30.1, and hash-locked wheels
 including git-filter-repo 2.47.0. The selected Action checkout supplies
 Partlet's code; no package build backend or source repository code is
-installed. The isolated Python launcher excludes the source checkout
-and clears inherited Python import configuration before child tools.
-Setup runs in the Action directory with uv configuration and caches
-disabled. Git comes from the runner image; actual versions are recorded
-in the step summary rather than claimed identical across runner updates.
+installed. The isolated Python launcher excludes the source checkout and
+clears inherited Python import configuration before child tools. Setup
+runs in the Action directory with uv configuration and caches disabled.
+Git comes from the runner image; actual versions are recorded in the
+step summary rather than claimed identical across runner updates.
 
 Inputs `account-id`, `access-key-id`, `secret-access-key` and `bucket`
 come from the four secrets in the example. Only the publishing step
@@ -73,10 +73,10 @@ receives them. Do not put credentials in job-level `env`. Optional
 `endpoint` supports an R2 jurisdiction endpoint; `repo` defaults to `.`,
 and `manifest` defaults to `partlet.toml` relative to that checkout.
 `local-out` is a test mode: it scans and builds into a local store while
-applying the same committed-manifest and checkout requirements.
-A detached checkout is supported if it is the publishing tip: the
-Action creates a missing local branch from `origin/<branch>` without
-fetching or changing an existing branch. Shallow history is rejected.
+applying the same committed-manifest and checkout requirements. A
+detached checkout is supported if it is the publishing tip: the Action
+creates a missing local branch from `origin/<branch>` without fetching
+or changing an existing branch. Shallow history is rejected.
 
 ## User-run first-use steps
 
@@ -87,17 +87,20 @@ these steps or establish hosted behavior.
 1. After the implementation PRs have landed, check out the reviewed
    Partlet release commit and run `bash scripts/setup.sh`. Review the
    [Worker deployment instructions](worker/README.md#user-run-deployment).
-2. Authenticate Wrangler yourself. From `worker/`, create the bucket
+
+1. Authenticate Wrangler yourself. From `worker/`, create the bucket
    with `node_modules/.bin/wrangler r2 bucket create YOUR_BUCKET`, or
    select an existing bucket. Keep its public bucket access disabled.
    Set `bucket_name`, `SOURCE`, and the custom-domain route in
    `worker/wrangler.toml` to your bucket, manifest source and domain.
-3. In Cloudflare R2, create a publisher API credential with **Object
+
+1. In Cloudflare R2, create a publisher API credential with **Object
    Read & Write**, scoped to that bucket only. Record the access key ID
    and secret when created. The Worker uses its R2 binding and must not
    receive this write credential. See Cloudflare's
    [R2 token guide](https://developers.cloudflare.com/r2/api/tokens/).
-4. Review the account and binding choices, then deploy from `worker/`:
+
+1. Review the account and binding choices, then deploy from `worker/`:
 
    ```bash
    WRANGLER_SEND_METRICS=false node_modules/.bin/wrangler deploy
@@ -108,8 +111,8 @@ these steps or establish hosted behavior.
    New metadata responses use `no-store`; pack retention separately
    protects in-flight fetches.
 
-5. Set the source repository secrets. Each command prompts for the
-   value so it stays out of shell history:
+1. Set the source repository secrets. Each command prompts for the value
+   so it stays out of shell history:
 
    ```bash
    gh secret set PARTLET_R2_ACCOUNT_ID --repo OWNER/MONOREPO
@@ -119,10 +122,11 @@ these steps or establish hosted behavior.
    ```
 
    If Partlet is private, allow the source repository to use its Action
-   in Partlet's Settings > Actions > General > Access. Match the optional
-   `endpoint` input to a jurisdiction bucket when applicable.
-6. Release only the reviewed, merged commit. For a first release, in
-   the Partlet checkout, replacing `REVIEWED_RELEASE_SHA` with its SHA:
+   in Partlet's Settings > Actions > General > Access. Match the
+   optional `endpoint` input to a jurisdiction bucket when applicable.
+
+1. Release only the reviewed, merged commit. For a first release, in the
+   Partlet checkout, replacing `REVIEWED_RELEASE_SHA` with its SHA:
 
    ```bash
    git tag -a v1.0.0 REVIEWED_RELEASE_SHA -m 'Partlet Action v1.0.0'
@@ -133,7 +137,8 @@ these steps or establish hosted behavior.
 
    Set `PARTLET_RELEASE_SHA` in the consumer example to that exact
    commit. Future tag moves are a separate user release decision.
-7. Start with a synthetic public project on the deployed site. Then
+
+1. Start with a synthetic public project on the deployed site. Then
    review each real project's full exported history locally, approve,
    commit the manifest and consumer workflow, and push the publishing
    branch. Inspect the Action summary and verify its tools and outcomes.
@@ -164,23 +169,23 @@ git -C partlet-live-check pull --ff-only
 git -C partlet-live-check log -1 --oneline
 ```
 
-Confirm metadata responses carry `Cache-Control: no-store`.
-Confirm the expected exported change, and open the site index, project,
-directory and file pages in a browser. Verify raw-download behavior,
-archives, and the deployed Worker's domain and bucket binding. Repeat
-an unchanged run and check its summary. These are required live checks;
-local simulations and hosted CI do not establish them.
+Confirm metadata responses carry `Cache-Control: no-store`. Confirm the
+expected exported change, and open the site index, project, directory
+and file pages in a browser. Verify raw-download behavior, archives, and
+the deployed Worker's domain and bucket binding. Repeat an unchanged run
+and check its summary. These are required live checks; local simulations
+and hosted CI do not establish them.
 
 ## Publication consistency
 
 Git metadata (`HEAD`, `info/refs`, `objects/info/packs`) uses `no-store`
 to avoid mixing independent cached generations. Content-addressed packs
 and indexes remain immutable. Retired packs stay available for at least
-one hour after the first sweep observes them outside the live and previous
-pack lists. This bounds the supported in-flight fetch window; a fetch
-that outlasts it must restart. Explicit approved rewrites and unpublish
-can intentionally invalidate an older history. Retired site builds and
-archives keep their separate one-publication grace.
+one hour after the first sweep observes them outside the live and
+previous pack lists. This bounds the supported in-flight fetch window; a
+fetch that outlasts it must restart. Explicit approved rewrites and
+unpublish can intentionally invalidate an older history. Retired site
+builds and archives keep their separate one-publication grace.
 
 See [Publisher contracts](docs/PUBLISHING.md#serialization-and-recovery)
 for durable retirement, interrupted runs, storage cost and expiry. Both
@@ -199,9 +204,10 @@ environment variables locally, then run:
 
 This prompts before deleting. For a stale lock, inspect its recorded
 holder and verify that run has ended before running
-`.venv/bin/partlet unlock --repo /absolute/path/to/source` and confirming.
-Do not automatically retry uncertain lock deletions. Recovery and
-explicit removal details are in [Publisher contracts](docs/PUBLISHING.md).
+`.venv/bin/partlet unlock --repo /absolute/path/to/source` and
+confirming. Do not automatically retry uncertain lock deletions.
+Recovery and explicit removal details are in
+[Publisher contracts](docs/PUBLISHING.md).
 
 ## Development and validation
 
@@ -213,14 +219,20 @@ bash scripts/check.sh
 bash scripts/e2e.sh
 ```
 
+Markdown is autoformatted when committing. If the hook changes a file,
+review and stage it again before retrying the commit. Run
+`bash scripts/fmt-markdown.sh` to format tracked Markdown manually.
+
 See [Quality](docs/QUALITY.md) and the [Worker guide](worker/README.md)
-for checks and evidence limits. The Action dependency lock is regenerated
-with `uv pip compile pyproject.toml --universal --generate-hashes
---python-version 3.12 -o action/requirements.txt`; review every changed
-version and hash. No private monorepo or cloud credentials are needed.
+for checks and evidence limits. The Action dependency lock is
+regenerated with
+`uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.12 -o action/requirements.txt`;
+review every changed version and hash. No private monorepo or cloud
+credentials are needed.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-Partlet is being built with help from [Claude Code](https://claude.com/claude-code).
+Partlet is being built with help from
+[Claude Code](https://claude.com/claude-code).

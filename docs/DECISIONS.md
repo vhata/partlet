@@ -1,11 +1,15 @@
 # Decisions
 
-Non-obvious choices and their trade-offs, dated, newest section first. Read the relevant entry before changing a mechanism that looks odd. Choices made autonomously under a delegation are recorded here for the user to review; an entry is a record, not a claim that the capability is complete.
+Non-obvious choices and their trade-offs, dated, newest section first.
+Read the relevant entry before changing a mechanism that looks odd.
+Choices made autonomously under a delegation are recorded here for the
+user to review; an entry is a record, not a claim that the capability is
+complete.
 
 ## 2026-11-02
 
 | Decision | Reason and trade-off |
-| --- | --- |
+| -- | -- |
 | The composite Action uses hash-locked wheels and an isolated Python launcher loading Partlet from the selected Action checkout. uv and gitleaks downloads have version and checksum pins; setup disables uv configuration and caching. | The publisher holds R2 write credentials, so dependencies and code must not resolve from the private source checkout or its tool configuration. Python import settings are also cleared for child tools. The source checkout receives no package installation. Cost: dependency changes require regenerating and reviewing the Action lock; supported runners are Linux x64 and ARM64. |
 | Only pack and index URLs are immutable. Stable site, raw and archive URLs use a 60-second cache with ETags, even though their stored keys contain a build or tip. | Public URLs resolve through `current`; caching those URLs as immutable would hide later publications. Mutable Git metadata uses `no-store`: independent cache ages could pair fresh refs with an old pack list lacking their objects. The separate timed pack policy protects in-flight reads and legacy metadata. |
 | Retain pack/index objects for at least an hour from the first sweep observing them outside both live and previous pack lists. Persist retirement timestamps before deletions, reuse them on retries and unchanged runs, and clear them for revived objects. | One publication of grace can disappear inside legacy metadata's 60-second freshness. An hour reserves 59 further minutes for an in-flight fetch, including rapid consolidations; disabling metadata caching alone does not protect it. Orphan uploads get the same conservative timer because interruption can obscure their publication status. Cost: storage temporarily retains obsolete packs and cleanup needs a later run; clock rollback delays cleanup. Corrupt state fails closed. Explicit unpublish deliberately invalidates active clients and removes all retained objects. |
@@ -17,7 +21,7 @@ Non-obvious choices and their trade-offs, dated, newest section first. Read the 
 ## 2026-10-26
 
 | Decision | Reason and trade-off |
-| --- | --- |
+| -- | -- |
 | Reject export-tip file paths that are not valid UTF-8 before any project uploads, pointer changes or unchanged-build shortcut. | Git paths are bytes, but site keys, HTML and URLs use Unicode. Replacement decoding merges distinct byte paths and silently overwrites site output. Strict decoding reports the offending byte path so it can be renamed; valid Unicode, including a literal replacement character, remains supported. Cost: non-UTF-8 tip paths block the project's publication, and unchanged runs read the tip's blobs to validate paths. Historical paths outside the tip are not subject to this site check. |
 | Directory page keys join the original path segments with `/children/`, then append `/index.html` under `tree/`. Public URLs keep the original directory path. | A page at `tree/docs/index.html` cannot also be a filesystem ancestor of the page for `docs/index.html`. The child namespace makes that page `tree/docs/children/index.html/index.html`. A repository directory named `children` is still an ordinary name, separated from the next level by another `children` namespace. This avoids percent-encoding differences between Python and JavaScript and does not lengthen individual filename components; the cost is extra path depth and total key length. The future Worker lookup in the Worker plan uses the same mapping. |
 | The site build ID also hashes a storage-layout identifier. | Changing the page layout must re-render an unchanged export into a new build, rather than take the unchanged shortcut or overwrite an earlier immutable build. Existing packs stay unchanged and the earlier build keeps its usual one-publish grace period. |
@@ -25,7 +29,7 @@ Non-obvious choices and their trade-offs, dated, newest section first. Read the 
 ## 2026-10-17
 
 | Decision | Reason and trade-off |
-| --- | --- |
+| -- | -- |
 | Every CLI build, publish and unpublish holds a per-source lock created with `If-None-Match: *`; automation must also serialize runs by source. Locks never expire automatically and `partlet unlock` is explicit recovery. | Cleanup deletes keys no live or grace pointer names, including another publisher's unfinished uploads. Workflow concurrency covers only that workflow/repository; the lock covers other callers. A retried conditional put recognizes its own token. R2 has no conditional delete, so deletes use one request attempt: an uncertain result raises instead of retrying against a replacement lock. Verify the holder has stopped before unlocking; removing a live holder still permits a read/delete race. |
 | R2 uses boto3's S3 API with checksum calculation/validation only when required, and only `NoSuchKey` means absence. | This follows Cloudflare's Python client example while keeping checksum behavior independent of SDK defaults. `NoSuchBucket` is also a 404 and must remain an error. Reads retry failed streams and close every response. Lists follow all continuation tokens. Deletes never retry an unknown outcome. |
 | R2 settings come from `PARTLET_R2_*`; access keys leave the environment before any child process starts. Endpoints require HTTPS except loopback simulation. | Git, filter-repo and gitleaks never inherit the publisher's access keys. Embedded URL credentials and server error text are not echoed. Explicit credentials avoid ambient SDK credential selection. |
@@ -43,7 +47,7 @@ Non-obvious choices and their trade-offs, dated, newest section first. Read the 
 ## 2026-10-15
 
 | Decision | Reason and trade-off |
-| --- | --- |
+| -- | -- |
 | Export never passes `--force` to `git filter-repo`, and checks that its destination is a fresh bare repository of its own before every mutating command. | filter-repo rewrites every ref and then expires reflogs and repacks, so running it against the wrong repository loses unpushed work for good. Without `--force` filter-repo refuses anything that does not look like a fresh clone, and partlet's own check refuses any destination that is not a bare repository at exactly that path, outside the monorepo. Cost: about twenty short `git rev-parse` calls per export. A `[remote]` section in the user's global or system git config makes filter-repo refuse the export; it fails closed. |
 | The site build ID hashes the export tip, the project description, the site `base_url`, the Partlet version and, since 2026-10-26, a storage-layout identifier. | The spec names only the tip and version, but the description and `base_url` (in the clone URL) are rendered into the pages, so changing either must produce a new build instead of taking the `unchanged` shortcut. Cost: a manifest edit to either re-renders the project. |
 | Site/archive keys superseded by a publish are deleted by the next publish, not by the one that superseded them; packs additionally use timed grace since 2026-11-02. | Gives clients in the middle of a fetch or page load one publish of grace before old packs, site builds and archives disappear. The bookkeeping was a `cleanup.json` list of superseded keys until 2026-10-17, when a sweep replaced it (see that entry). |
