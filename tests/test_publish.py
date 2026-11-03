@@ -91,6 +91,60 @@ def test_second_run_without_changes_is_unchanged(mono, tmp_path, first, serve):
     assert (tmp_path / "clone" / "a.txt").read_text() == "one\n"
 
 
+def test_first_publish_retry_restores_head_without_rewriting_git_objects(
+    mono, tmp_path, first, serve, monkeypatch
+):
+    store, approved = first
+    head_key = "s/p/foo/git/HEAD"
+    interrupted = InterruptedStore(store.root, head_key)
+    assert run(mono, tmp_path, interrupted, approved)["foo"].status == "failed"
+    assert read_state(store, "s/p/foo/git").tip == approved
+    assert store.get(head_key) is None
+    assert store.get("s/p/foo/current") is None
+    before = {key: store.get(key) for key in store.list("s/p/foo/git/")}
+    puts = []
+    original_put = store.put
+
+    def record(key, data, content_type=None):
+        puts.append(key)
+        original_put(key, data, content_type)
+
+    monkeypatch.setattr(store, "put", record)
+    assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    assert store.get(head_key) == b"ref: refs/heads/main\n"
+    assert {key: store.get(key) for key in before} == before
+    assert [key for key in puts if key.startswith("s/p/foo/git/")] == [head_key]
+    assert clone_text(serve, tmp_path) == "one\n"
+
+    puts.clear()
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
+    assert store.get(head_key) == b"ref: refs/heads/main\n"
+    assert not [key for key in puts if key.startswith("s/p/foo/")]
+
+
+def test_unchanged_publish_repairs_only_missing_head(
+    mono, tmp_path, first, serve, monkeypatch
+):
+    store, approved = first
+    assert run(mono, tmp_path, store, approved)["foo"].status == "published"
+    head_key = "s/p/foo/git/HEAD"
+    store.delete(head_key)  # A legacy retry may have written current without HEAD.
+    before = {key: store.get(key) for key in store.list("s/p/foo/")}
+    puts = []
+    original_put = store.put
+
+    def record(key, data, content_type=None):
+        puts.append(key)
+        original_put(key, data, content_type)
+
+    monkeypatch.setattr(store, "put", record)
+    assert run(mono, tmp_path, store, approved)["foo"].status == "unchanged"
+    assert store.get(head_key) == b"ref: refs/heads/main\n"
+    assert {key: store.get(key) for key in before} == before
+    assert [key for key in puts if key.startswith("s/p/foo/")] == [head_key]
+    assert clone_text(serve, tmp_path) == "one\n"
+
+
 @pytest.mark.parametrize("existing", [False, True])
 def test_non_utf8_paths_fail_before_project_store_changes(
     mono, tmp_path, first, serve, existing
