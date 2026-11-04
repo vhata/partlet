@@ -144,9 +144,9 @@ these steps or establish hosted behavior.
    branch. Inspect the Action summary and verify its tools and outcomes.
 
    If cloning hangs on macOS, see the
-   [HTTP/2 compatibility issue and scoped workaround](docs/PUBLISHING.md#macos-clone-hangs-over-http2).
-   A successful trial with that workaround does not establish plain
-   clone/pull compatibility for the affected client.
+   [verified Git upgrade and temporary HTTP/1.1 workaround](docs/PUBLISHING.md#macos-clone-hangs-over-http2).
+   The upgraded Homebrew client passed plain HTTP/2 clone and
+   incremental pull without client configuration.
 
 ## Live acceptance, run by the user
 
