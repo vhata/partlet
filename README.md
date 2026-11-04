@@ -143,6 +143,11 @@ these steps or establish hosted behavior.
    commit the manifest and consumer workflow, and push the publishing
    branch. Inspect the Action summary and verify its tools and outcomes.
 
+   If cloning hangs on macOS, see the
+   [HTTP/2 compatibility issue and scoped workaround](docs/PUBLISHING.md#macos-clone-hangs-over-http2).
+   A successful trial with that workaround does not establish plain
+   clone/pull compatibility for the affected client.
+
 ## Live acceptance, run by the user
 
 After a successful publication, replace the URL and project below:
