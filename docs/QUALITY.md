@@ -30,17 +30,17 @@ agents run the same scripts.
 | -- | -- | -- | -- | -- | -- | -- |
 | `scripts/fmt-check.sh` | Ruff over `src`, `tests` and `action`; mdformat over tracked Markdown outside `docket/` | yes | via `check.sh` | via `check.sh` | via `check.sh` |  |
 | `scripts/lint.sh` | shellcheck over `scripts/*.sh`, `action/*.sh` and `.githooks/*`, then `ruff check` over `src`, `tests` and `action` | yes | via `check.sh` | via `check.sh` | via `check.sh` |  |
-| `scripts/test.sh` | pytest; requires at least one executed case |  | via `check.sh` | via `check.sh` | via `check.sh` |  |
+| `scripts/test.sh` | pytest; requires at least one executed case |  |  | via `check.sh` | via `check.sh` |  |
 | `scripts/worker-lint.sh` | Biome format/lint and smoke-driver Ruff | yes | via `check.sh` | via `check.sh` | via `check.sh` |  |
 | `scripts/worker-typecheck.sh` | generated Wrangler types, source and test TypeScript |  | via `check.sh` | via `check.sh` | via `check.sh` |  |
-| `scripts/worker-test.sh` | Vitest in workerd with simulated R2; empty suite fails |  | via `check.sh` | via `check.sh` | via `check.sh` |  |
-| `scripts/worker-bundle.sh` | Wrangler deploy bundle dry-run; no deployment |  | via `check.sh` | via `check.sh` | via `check.sh` |  |
-| `scripts/worker-smoke.sh` | actual publisher, local R2 and Wrangler clone/pull |  | via `check.sh` | via `check.sh` | via `check.sh` |  |
+| `scripts/worker-test.sh` | Vitest in workerd with simulated R2; empty suite fails |  |  | via `check.sh` | via `check.sh` |  |
+| `scripts/worker-bundle.sh` | Wrangler deploy bundle dry-run; no deployment |  |  | via `check.sh` | via `check.sh` |  |
+| `scripts/worker-smoke.sh` | actual publisher, local R2 and Wrangler clone/pull |  |  | via `check.sh` | via `check.sh` |  |
 | `scripts/e2e.sh` | actual review/publish/unpublish CLI, simulated S3, local R2 and public Worker routes |  |  | via `e2e` job | via `e2e` job |  |
 | `docket/scripts/ci.sh` | queue hygiene, Markdown links, PR markers against the queues |  |  | yes | yes |  |
 | `docket/scripts/check-queues.sh --strict` | queue hygiene | yes |  | via `ci.sh` | via `ci.sh` |  |
 | `docket/scripts/check-links.sh` | relative Markdown links resolve | yes |  | via `ci.sh` | via `ci.sh` |  |
-| `scripts/check.sh` | all gates in its `gates` array, cheapest first |  | yes | yes | yes |  |
+| `scripts/check.sh` | all gates by default; formatting, lint and types with `--push` |  | with `--push` | yes | yes |  |
 
 `scripts/check.sh` is the composite entry point: `ci.yml` runs it rather
 than the gates individually. Worker runtime tests and the smoke check
@@ -55,9 +55,13 @@ the index. Partially staged Markdown is checked from the index, and an
 unformatted staged version stops the commit without touching the working
 copy. Then pre-commit runs the format check, lint and the queue and link
 validators on the whole working tree. Pre-push runs
-`bash scripts/check.sh`, including the test suite. Bypassing a hook is
-for a broken toolchain only; state the bypass and equivalent checks in
-the PR.
+`bash scripts/check.sh --push`: Python and Markdown formatting, Python
+and shell lint, Worker lint and Worker type checks. Tests, bundling and
+the Worker smoke check run with the default `bash scripts/check.sh`
+before presenting changes and in required CI on pull requests and main.
+The faster push checks do not replace that full validation. Bypassing a
+hook is for a broken toolchain only; state the bypass and equivalent
+checks in the PR.
 
 Run `bash scripts/fmt-markdown.sh` to format all tracked Markdown, or
 add `--check` for a read-only check. The pinned mdformat and GitHub
