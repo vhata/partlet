@@ -1,22 +1,88 @@
 # Partlet
 
-Publish selected directories of a private Git monorepo as public,
-read-only Git repositories and a browsable site. The publisher exports
-and scans project history; the Cloudflare Worker serves public objects
-from R2 without access to the private repository or publisher keys.
+Partlet lets you make individual projects in a private Git repository
+public, while continuing to develop them in that same private
+repository. Each project gets a read-only Git repository and a website
+for browsing its files, reading its README, and downloading source
+archives.
 
-## Publishing a monorepo
+For example, suppose your private repository contains:
 
-The source repository carries `partlet.toml`, a publishing workflow, and
-four GitHub Actions secrets. Partlet and its dependencies come from the
-Action checkout selected by the workflow's release commit SHA.
+```text
+my-monorepo/
+├── tools/foo/       → publish as https://code.example.com/foo
+├── libraries/bar/   → publish as https://code.example.com/bar
+└── internal/        → keep private
+```
 
-A minimal manifest for a project in `tools/foo` is:
+Visitors can browse `https://code.example.com/foo/` or run:
+
+```bash
+git clone https://code.example.com/foo
+```
+
+That clone contains the contents and Git history of `tools/foo`, with
+that directory becoming the repository root. Visitors can pull updates;
+they cannot push changes back. Partlet does not provide issues or pull
+requests. You choose which directories to publish.
+
+## How it works
+
+You review a project's exported history locally and approve its first
+publication. A GitHub Action in your private repository then exports the
+selected directories, scans their history for secrets, builds their web
+pages, and uploads the result to Cloudflare R2. A Cloudflare Worker
+serves those public files on your domain. The Worker has no access to
+your private repository.
+
+**After the first publication, later fast-forward changes publish
+automatically when you push to the configured branch.** Approval is not
+a prompt for every update. History rewrites require explicit review.
+
+**Publishing includes history**, including deleted files, commit
+messages, and author names and emails. Messages can mention private
+paths even when those files are excluded. Secret scanning helps find
+credentials; you still need to decide whether the entire exported
+history is suitable for public release.
+
+## Get started
+
+You need a private repository on GitHub with a full local clone, Git
+2.31 or newer, and
+[uv](https://docs.astral.sh/uv/getting-started/installation/). The local
+commands below support macOS and Linux. Hosting also needs a Cloudflare
+account with R2 enabled, a domain managed by Cloudflare, and Node/npm;
+those steps follow in the hosting guide. R2 and Workers are billable
+services.
+
+### 1. Install Partlet in a separate checkout
+
+Run these commands in the directory where you keep your checkouts:
+
+```bash
+git clone https://github.com/vhata/partlet.git
+cd partlet
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python .
+bash scripts/install-gitleaks.sh .venv/bin
+PARTLET_DIR="$PWD"
+SOURCE_REPO=/absolute/path/to/my-monorepo
+```
+
+Replace `SOURCE_REPO` with your existing source checkout's absolute
+path. Keep these shell variables for the following commands. uv can
+download Python 3.12 if needed. The install includes the export tool;
+the final script installs the pinned secret scanner. This installation
+does not install development hooks in either repository.
+
+### 2. Choose a project
+
+Create `partlet.toml` at the root of your **source repository**:
 
 ```toml
 [site]
-source = "my-source"
-base_url = "https://partlet.example.com"
+source = "my-monorepo"
+base_url = "https://code.example.com"
 branch = "main"
 
 [projects.foo]
@@ -24,199 +90,76 @@ path = "tools/foo"
 description = "Foo command-line tool"
 ```
 
-Copy [examples/partlet.yml](examples/partlet.yml) to
-`.github/workflows/partlet.yml` in the source repository. Replace
-`SOURCE` with `site.source`, `PARTLET_RELEASE_SHA` with the reviewed
-Action release commit, and `main` if using another publishing branch.
-Keep `fetch-depth: 0`, `persist-credentials: false`, read-only workflow
-permissions, and `cancel-in-progress: false`. All workflows publishing
-the same source must use the same concurrency group. Avoid pull-request
-triggers: publication requires HEAD at the publishing branch tip and an
-exactly committed manifest. The source lock also covers publishers
-outside this workflow and never expires automatically.
+Replace the URL and project path with your own. `foo` becomes the public
+URL name; `source` is a stable internal storage name for your monorepo.
+Use lowercase names without spaces. Add another `[projects.NAME]` table
+for each additional project.
 
-Before publishing, use a separate Partlet checkout with Python 3.12,
-`uv`, Git, shellcheck, and the Node/npm versions in the
-[Worker guide](worker/README.md):
+The selected directory must already be committed on the local `main`
+branch (or the branch you set above). Partlet reads that branch's
+committed history, including merged history, rather than uncommitted
+files. If the directory moved in the past, declare its old locations
+using [`previous_paths`](docs/PUBLISHING.md#manifest-reference).
+
+### 3. Review and approve the first export
+
+From the same terminal:
 
 ```bash
-bash scripts/setup.sh
-.venv/bin/partlet review foo --repo /absolute/path/to/source \
+"$PARTLET_DIR/.venv/bin/partlet" review foo --repo "$SOURCE_REPO" \
   --published-tip none
 ```
 
-Inspect the report's complete history, deleted files, identities,
-messages and secret scan before answering yes. The command writes the
-exported commit as `approved` in `partlet.toml`. Commit and push that
-pin on the publishing branch. For an existing public project, omit
-`--published-tip none` so review reads its public refs. Approval never
-bypasses scanning or fast-forward enforcement. See
-[Publisher contracts](docs/PUBLISHING.md) for path moves, rewrites,
-scanner configuration, summaries and recovery.
+Read the report, including deleted files, identities, commit messages,
+and scan results. Exit the pager with `q` if one opens. Answer yes only
+when that history is safe to publish. Partlet writes an `approved` hash
+into your source repository's `partlet.toml`; leave that value to the
+tool. This command does not upload anything and needs no cloud keys.
+Repeat for any other projects you want to publish.
 
-## Action contract
+Use `--published-tip none` only for a project's first publication. For
+an existing project, omit it so review checks the public site's history.
 
-The composite Action supports Linux x64 and ARM64 runners. Use
-`ubuntu-24.04` in the consumer workflow. It installs Python 3.12, a
-checksum-verified uv 0.13.5 and gitleaks 8.30.1, and hash-locked wheels
-including git-filter-repo 2.47.0. The selected Action checkout supplies
-Partlet's code; no package build backend or source repository code is
-installed. The isolated Python launcher excludes the source checkout and
-clears inherited Python import configuration before child tools. Setup
-runs in the Action directory with uv configuration and caches disabled.
-Git comes from the runner image; actual versions are recorded in the
-step summary rather than claimed identical across runner updates.
+### 4. Connect Cloudflare and enable publishing
 
-Inputs `account-id`, `access-key-id`, `secret-access-key` and `bucket`
-come from the four secrets in the example. Only the publishing step
-receives them. Do not put credentials in job-level `env`. Optional
-`endpoint` supports an R2 jurisdiction endpoint; `repo` defaults to `.`,
-and `manifest` defaults to `partlet.toml` relative to that checkout.
-`local-out` is a test mode: it scans and builds into a local store while
-applying the same committed-manifest and checkout requirements. A
-detached checkout is supported if it is the publishing tip: the Action
-creates a missing local branch from `origin/<branch>` without fetching
-or changing an existing branch. Shallow history is rejected.
+Follow [Publish your first site](docs/GETTING_STARTED.md). It walks
+through creating the bucket, configuring and deploying the Worker,
+adding GitHub secrets and the publishing workflow, committing the
+approval, and verifying your first public clone.
 
-## User-run first-use steps
+## Everyday use
 
-These operations belong to the user. R2 bucket creation and Worker
-provisioning/deployment are **billable**. Local checks do not perform
-these steps or establish hosted behavior.
+After setup, commit and push changes to your source repository's
+publishing branch as usual. Check its **Actions → Partlet** run and
+summary, then browse the site or `git pull` a public clone. Public
+repositories use a `main` branch even if your source branch has another
+name.
 
-1. After the implementation PRs have landed, check out the reviewed
-   Partlet release commit and run `bash scripts/setup.sh`. Review the
-   [Worker deployment instructions](worker/README.md#user-run-deployment).
+To add a project, add its manifest table, review it locally, then commit
+and push the approval. To move a project or change author mapping,
+[review the changed export](docs/PUBLISHING.md#review-and-approval)
+before pushing the new configuration.
 
-1. Authenticate Wrangler yourself. From `worker/`, create the bucket
-   with `node_modules/.bin/wrangler r2 bucket create YOUR_BUCKET`, or
-   select an existing bucket. Keep its public bucket access disabled.
-   Set `bucket_name`, `SOURCE`, and the custom-domain route in
-   `worker/wrangler.toml` to your bucket, manifest source and domain.
+To stop publishing a project, removing its manifest entry stops updates
+but leaves the existing public copy available. Follow the
+[removal instructions](docs/PUBLISHING.md#removing-a-project) to delete
+that copy too. If a macOS clone hangs, see
+[Git troubleshooting](docs/PUBLISHING.md#macos-clone-hangs-over-http2).
 
-1. In Cloudflare R2, create a publisher API credential with **Object
-   Read & Write**, scoped to that bucket only. Record the access key ID
-   and secret when created. The Worker uses its R2 binding and must not
-   receive this write credential. See Cloudflare's
-   [R2 token guide](https://developers.cloudflare.com/r2/api/tokens/).
+## More documentation
 
-1. Review the account and binding choices, then deploy from `worker/`:
-
-   ```bash
-   WRANGLER_SEND_METRICS=false node_modules/.bin/wrangler deploy
-   ```
-
-   For an existing site, allow previously cached 60-second Git metadata
-   to expire after deploying the new Worker and before publishing again.
-   New metadata responses use `no-store`; pack retention separately
-   protects in-flight fetches.
-
-1. Set the source repository secrets. Each command prompts for the value
-   so it stays out of shell history:
-
-   ```bash
-   gh secret set PARTLET_R2_ACCOUNT_ID --repo OWNER/MONOREPO
-   gh secret set PARTLET_R2_ACCESS_KEY_ID --repo OWNER/MONOREPO
-   gh secret set PARTLET_R2_SECRET_ACCESS_KEY --repo OWNER/MONOREPO
-   gh secret set PARTLET_R2_BUCKET --repo OWNER/MONOREPO
-   ```
-
-   If Partlet is private, allow the source repository to use its Action
-   in Partlet's Settings > Actions > General > Access. Match the
-   optional `endpoint` input to a jurisdiction bucket when applicable.
-
-1. Release only the reviewed, merged commit. For a first release, in the
-   Partlet checkout, replacing `REVIEWED_RELEASE_SHA` with its SHA:
-
-   ```bash
-   git tag -a v1.0.0 REVIEWED_RELEASE_SHA -m 'Partlet Action v1.0.0'
-   git push origin v1.0.0
-   git tag -a v1 REVIEWED_RELEASE_SHA -m 'Partlet Action v1'
-   git push origin v1
-   ```
-
-   Set `PARTLET_RELEASE_SHA` in the consumer example to that exact
-   commit. Future tag moves are a separate user release decision.
-
-1. Start with a synthetic public project on the deployed site. Then
-   review each real project's full exported history locally, approve,
-   commit the manifest and consumer workflow, and push the publishing
-   branch. Inspect the Action summary and verify its tools and outcomes.
-
-   If cloning hangs on macOS, see the
-   [verified Git upgrade and temporary HTTP/1.1 workaround](docs/PUBLISHING.md#macos-clone-hangs-over-http2).
-   The upgraded Homebrew client passed plain HTTP/2 clone and
-   incremental pull without client configuration.
-
-## Live acceptance, run by the user
-
-After a successful publication, replace the URL and project below:
-
-```bash
-public_site=https://partlet.example.com
-project=foo
-git clone "$public_site/$project" partlet-live-check
-curl --fail --show-error "$public_site/$project/info/refs"
-curl --fail --show-error --head "$public_site/$project/objects/info/packs"
-curl --fail --show-error "$public_site/$project/objects/info/packs"
-curl --fail --show-error "$public_site/$project/"
-curl --fail --show-error "$public_site/$project/raw/README.md"
-curl --fail --show-error -o /tmp/partlet-live.zip \
-  "$public_site/$project/archive/$project.zip"
-unzip -t /tmp/partlet-live.zip
-```
-
-Make and push a harmless change inside the approved project, wait for
-its publishing run to succeed, then run:
-
-```bash
-git -C partlet-live-check pull --ff-only
-git -C partlet-live-check log -1 --oneline
-```
-
-Confirm metadata responses carry `Cache-Control: no-store`. Confirm the
-expected exported change, and open the site index, project, directory
-and file pages in a browser. Verify raw-download behavior, archives, and
-the deployed Worker's domain and bucket binding. Repeat an unchanged run
-and check its summary. These are required live checks; local simulations
-and hosted CI do not establish them.
-
-## Publication consistency
-
-Git metadata (`HEAD`, `info/refs`, `objects/info/packs`) uses `no-store`
-to avoid mixing independent cached generations. Content-addressed packs
-and indexes remain immutable. Retired packs stay available for at least
-one hour after the first sweep observes them outside the live and
-previous pack lists. This bounds the supported in-flight fetch window; a
-fetch that outlasts it must restart. Explicit approved rewrites and
-unpublish can intentionally invalidate an older history. Retired site
-builds and archives keep their separate one-publication grace.
-
-See [Publisher contracts](docs/PUBLISHING.md#serialization-and-recovery)
-for durable retirement, interrupted runs, storage cost and expiry. Both
-cache behavior and rapid-publication retention are tested through public
-Worker routes with synthetic data. Hosted acceptance remains user-run.
-
-## Removal and recovery
-
-To remove a project, remove its manifest entry and push that change
-first. Verify that publishing has stopped, set the scoped `PARTLET_R2_*`
-environment variables locally, then run:
-
-```bash
-.venv/bin/partlet unpublish foo --repo /absolute/path/to/source
-```
-
-This prompts before deleting. For a stale lock, inspect its recorded
-holder and verify that run has ended before running
-`.venv/bin/partlet unlock --repo /absolute/path/to/source` and
-confirming. Do not automatically retry uncertain lock deletions.
-Recovery and explicit removal details are in
-[Publisher contracts](docs/PUBLISHING.md).
+- [Publish your first site](docs/GETTING_STARTED.md): Cloudflare and
+  GitHub setup, then first-clone verification.
+- [Publishing reference](docs/PUBLISHING.md): manifest fields, CLI and
+  Action options, history changes, removal, and recovery.
+- [Worker guide](worker/README.md): local previews and HTTP behavior.
+- [Design decisions](docs/DECISIONS.md): implementation trade-offs.
 
 ## Development and validation
 
-Use synthetic repositories and local simulated services:
+To work on Partlet itself, use Python 3.12, uv, Git, shellcheck, Node
+from [worker/.node-version](worker/.node-version), and npm >=11.19. From
+the Partlet checkout:
 
 ```bash
 bash scripts/setup.sh
@@ -224,16 +167,18 @@ bash scripts/check.sh
 bash scripts/e2e.sh
 ```
 
-Markdown is autoformatted when committing. If the hook changes a file,
-review and stage it again before retrying the commit. Run
-`bash scripts/fmt-markdown.sh` to format tracked Markdown manually.
+Development setup installs Python development dependencies, the scanner,
+Worker dependencies, and Git hooks shared by this clone's worktrees. The
+checks use synthetic repositories and local simulated services; they
+need no cloud credentials. See [Quality](docs/QUALITY.md).
 
-See [Quality](docs/QUALITY.md) and the [Worker guide](worker/README.md)
-for checks and evidence limits. The Action dependency lock is
-regenerated with
-`uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.12 -o action/requirements.txt`;
-review every changed version and hash. No private monorepo or cloud
-credentials are needed.
+Markdown is autoformatted when committing. If the hook changes a file,
+review and stage it again before retrying. To format manually, run
+`bash scripts/fmt-markdown.sh`.
+
+To regenerate the Action dependency lock, run
+`uv pip compile pyproject.toml --universal --generate-hashes --python-version 3.12 -o action/requirements.txt`
+and review every changed version and hash.
 
 ## License
 
