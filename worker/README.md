@@ -1,78 +1,80 @@
-# Public read-only Worker
+# Partlet Worker
 
-The Worker serves objects produced by `partlet build` or the publisher
-from one R2 source prefix. It renders nothing and only calls the
-bucket's `get` and `head` methods. It has no private-repository
-credentials. Stored HTTP metadata is ignored; response policy belongs to
-the Worker.
+The Worker is the public-facing part of Partlet. It receives requests
+for your site and serves the files and Git objects the publisher stored
+in Cloudflare R2. It does not export repositories or render pages, and
+it needs no credentials for the private source repository.
 
-## Development
-
-Use Node from [.node-version](.node-version), npm >=11.19, Python 3.12,
-`uv`, Git and shellcheck. Each worktree gets its own `.venv`. npm's
-`allowScripts` permits only the pinned esbuild and workerd installers.
-Setup rejects older npm versions, which ignore that allowlist.
-
-From the repository root:
-
-```bash
-bash scripts/setup.sh
-bash scripts/check.sh
-```
-
-The Worker gates are `worker-lint`, `worker-typecheck`, `worker-test`,
-`worker-bundle` and `worker-smoke` under `scripts/`. Lint also checks
-the Python smoke driver. Types are generated and checked with Wrangler:
-
-```bash
-cd worker
-WRANGLER_SEND_METRICS=false CLOUDFLARE_CF_FETCH_ENABLED=false npm run types
-node_modules/.bin/biome check --write .
-```
-
-The runtime suite uses workerd and simulated R2. The bundle gate runs
-`wrangler deploy --dry-run` only. The smoke gate builds a synthetic
-monorepo with the actual publisher, seeds isolated local R2, starts
-`wrangler dev --local`, clones, publishes a second commit and pulls it.
-It checks directory keys, unusual names, archives, raw safety headers
-and real pack ranges. It reserves a local port and owns its temporary
-Git configuration, HOME, storage and server processes; no account is
-needed. A failed run prints its local server log.
-
-Local commands disable metrics and Cloudflare's default metadata fetch
-with `WRANGLER_SEND_METRICS=false` and
-`CLOUDFLARE_CF_FETCH_ENABLED=false`. Local bindings alone do not disable
-that tool-default metadata request.
+**Setting up your public site?** Follow
+[Publish your first site](../docs/GETTING_STARTED.md) for bucket
+creation, credentials, domain configuration, and deployment. This page
+covers local previews, Worker behavior, and development.
 
 ## Preview local publisher output
 
-Build only a synthetic repository while developing this lane:
+A local preview uses simulated R2 and needs no Cloudflare account. First
+follow the README's
+[installation and approval steps](../README.md#get-started). A project
+without an `approved` hash is skipped by `build`. Use a harmless test
+project while learning this flow.
+
+Install Node from [.node-version](.node-version) and npm >=11.19. Set
+these paths to your checkouts, then run:
 
 ```bash
-.venv/bin/partlet build --help
+PARTLET_DIR=/absolute/path/to/partlet
+SOURCE_REPO=/absolute/path/to/my-monorepo
+cd "$PARTLET_DIR"
+npm ci --prefix worker --no-audit --no-fund
+PARTLET_PREVIEW="$(mktemp -d)"
+PARTLET_LOCAL_R2="$(mktemp -d)"
+"$PARTLET_DIR/.venv/bin/partlet" build --repo "$SOURCE_REPO" \
+  --out "$PARTLET_PREVIEW" --scan
 ```
 
-The output directory contains store keys beginning with the manifest's
-`site.source`. Seed it into local R2 in one process, then run Wrangler
-with the same persistence directory and source. The seeder mirrors
-deletions too; use a dedicated, disposable persistence directory. If you
-changed `bucket_name` in Wrangler's config, pass that name as the
-seeder's optional third argument so both tools open the same local
-bucket.
+Expect `published` for the approved project. `build` writes a directory
+of internal storage keys, rather than a directly browsable website. Load
+it into the local Worker's bucket and start the server:
 
 ```bash
-cd worker
+cd "$PARTLET_DIR/worker"
 export WRANGLER_SEND_METRICS=false CLOUDFLARE_CF_FETCH_ENABLED=false
-node tools/seed-r2.mjs /absolute/path/to/output /absolute/path/to/local-r2
+PARTLET_BUCKET=replace-me
+node tools/seed-r2.mjs "$PARTLET_PREVIEW" "$PARTLET_LOCAL_R2" "$PARTLET_BUCKET"
 node_modules/.bin/wrangler dev --local --ip 127.0.0.1 \
-  --port 8787 --inspector-port 0 --var SOURCE:synthetic \
-  --persist-to /absolute/path/to/local-r2
+  --port 8787 --inspector-port 0 --var SOURCE:my-monorepo \
+  --persist-to "$PARTLET_LOCAL_R2"
 ```
 
-Open `http://127.0.0.1:8787/` or clone `http://127.0.0.1:8787/foo`.
-Replace `synthetic` and `foo` with the test manifest's source and
-project names. The automated smoke gate provides a complete reproducible
-example without any manually prepared output.
+`PARTLET_BUCKET` must match `bucket_name` in `worker/wrangler.toml`; the
+unedited file uses `replace-me`. Replace `my-monorepo` in the `--var`
+argument with the manifest's `site.source`. The same persistence
+directory must be used by both commands. The seeder replaces the local
+bucket's entire contents, so use the fresh temporary directory above.
+
+Open `http://127.0.0.1:8787/`. In another terminal, clone your project
+(replace `foo` if needed):
+
+```bash
+git clone http://127.0.0.1:8787/foo partlet-preview-clone
+```
+
+The page's displayed clone URL uses the manifest's `base_url`; use the
+localhost URL above for local cloning. Stop Wrangler with Ctrl-C. To
+preview an update, commit it on your source publishing branch, rerun
+`build`, reseed the same local store with the server stopped, then
+restart Wrangler. Keep the shell variables if you want to reuse these
+commands. See [publisher commands](../docs/PUBLISHING.md#commands) for
+build options.
+
+## User-run deployment
+
+Use the [first-site guide](../docs/GETTING_STARTED.md) for the
+deployment sequence. R2 and Workers are billable; creation and
+deployment are user-run operations. Keep direct bucket access disabled
+and verify the site through its public Worker domain after publishing.
+Local preview and a dry-run bundle do not establish hosted behavior or
+account setup.
 
 ## Public contract and safety
 
@@ -149,41 +151,43 @@ old 60-second Git metadata cache entries to expire before a rapid
 publish. `no-store` cannot invalidate entries already served by the old
 Worker.
 
-## User-run deployment
+## Development
 
-R2 and Workers are billable. Creating the bucket, deploying the Worker,
-and attaching a domain can create or change billable cloud resources.
-These steps belong to the user; local gates never perform them.
+Use Node from [.node-version](.node-version), npm >=11.19, Python 3.12,
+`uv`, Git and shellcheck. Each worktree gets its own `.venv`. npm's
+`allowScripts` permits only the pinned esbuild and workerd installers.
+Setup rejects older npm versions, which ignore that allowlist.
 
-1. Review the exported history and secret-scan results before placing
-   anything in a public-serving bucket. Complete the publishing setup
-   separately; this Worker does not implement an R2 publishing backend.
+From the repository root:
 
-1. Create or select the R2 bucket in your Cloudflare account. Keep
-   public bucket access disabled so clients cannot bypass Worker routing
-   and content policy. Use a separate write credential for the
-   publisher.
+```bash
+bash scripts/setup.sh
+bash scripts/check.sh
+```
 
-1. Replace the bucket, SOURCE and domain placeholders in
-   [wrangler.toml](wrangler.toml). SOURCE must equal `site.source` in
-   the publishing manifest. The custom domain requires your own
-   configured Cloudflare zone. Do not commit account tokens or private
-   values.
+The Worker gates are `worker-lint`, `worker-typecheck`, `worker-test`,
+`worker-bundle` and `worker-smoke` under `scripts/`. Lint also checks
+the Python smoke driver. Types are generated and checked with Wrangler:
 
-1. Authenticate Wrangler yourself and run the following from `worker/`
-   only after reviewing the resulting account and resource choices:
+```bash
+cd worker
+WRANGLER_SEND_METRICS=false CLOUDFLARE_CF_FETCH_ENABLED=false npm run types
+node_modules/.bin/biome check --write .
+```
 
-   ```bash
-   WRANGLER_SEND_METRICS=false node_modules/.bin/wrangler deploy
-   ```
+The runtime suite uses workerd and simulated R2. The bundle gate runs
+`wrangler deploy --dry-run` only. The smoke gate builds a synthetic
+monorepo with the actual publisher, seeds isolated local R2, starts
+`wrangler dev --local`, clones, publishes a second commit and pulls it.
+It checks directory keys, unusual names, archives, raw safety headers
+and real pack ranges. It reserves a local port and owns its temporary
+Git configuration, HOME, storage and server processes; no account is
+needed. A failed run prints its local server log.
 
-1. With synthetic public data first, verify pages, safe raw downloads,
-   clone and incremental pull on the deployed domain. Verify the serving
-   deployment and bucket binding. Local runtime tests and a dry-run
-   bundle do not establish hosted behavior, account settings or billing.
-   Avoid cache rules that override the response policy. Fetches must
-   finish within the documented retention window; explicit removal
-   invalidates active fetches.
+Local commands disable metrics and Cloudflare's default metadata fetch
+with `WRANGLER_SEND_METRICS=false` and
+`CLOUDFLARE_CF_FETCH_ENABLED=false`. Local bindings alone do not disable
+that tool-default metadata request.
 
 The
 [Workers Vitest configuration](https://developers.cloudflare.com/workers/testing/vitest-integration/configuration/)

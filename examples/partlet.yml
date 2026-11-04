@@ -1,5 +1,9 @@
 # Copy to .github/workflows/partlet.yml in the source repository.
-# Replace SOURCE and PARTLET_RELEASE_SHA with your source and reviewed release.
+# Setup walkthrough: docs/GETTING_STARTED.md in the Partlet checkout.
+# Replace SOURCE with site.source from partlet.toml.
+# Replace PARTLET_RELEASE_SHA with the full commit hash of your Partlet checkout
+# (git rev-parse HEAD there). You do not need to create a release tag.
+# Create the four PARTLET_R2_* secrets in the source repository before enabling.
 name: Partlet
 on:
   push:
