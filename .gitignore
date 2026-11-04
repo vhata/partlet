@@ -11,6 +11,7 @@ dist/
 node_modules/
 .wrangler/
 .dev.vars
+.env
 
 # Editors and OS
 .DS_Store
