@@ -12,7 +12,7 @@ needs your private repository or the publisher's write credentials.
 
 ## Manifest reference
 
-Keep this file at the root of your source repository. For example:
+Keep `partlet.toml` at the root of your source repository. For example:
 
 ```toml
 [site]
@@ -47,8 +47,10 @@ branch.
 
 Source and project names use lowercase letters, digits, `.`, `_` and
 `-`, beginning with a letter or digit. Project names cannot end in
-`.git`. Treat these names as stable: changing them creates a different
-storage namespace; it does not move or remove an existing publication.
+`.git`. Quote project names containing dots in TOML, for example
+`[projects."my.tool"]`. Treat these names as stable: changing them
+creates a different storage namespace; it does not move or remove an
+existing publication.
 
 `path` and `previous_paths` name directories, not files or glob
 patterns. Use forward slashes, without `.` or `..` components. They
