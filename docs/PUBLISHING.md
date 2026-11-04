@@ -63,27 +63,57 @@ lock.
 
 ## macOS clone hangs over HTTP/2
 
-A live synthetic trial reproduced a hanging plain `git clone` with
-Homebrew Git 2.56.0 linked to Apple's libcurl 8.7.1. The public refs,
-HEAD and pack list responded normally. During cloning, expected 404
-responses for missing loose objects and alternates triggered HTTP/2
-errors and corrupted headers on subsequent requests. Partlet publishes
-packed objects, so those 404 probes are normal Git transport behavior.
-
-The failure also reproduced with system curl 8.7.1 using HTTP/2 and
-`--fail` across successive requests. The same HTTP/2 sequence succeeded
-with Homebrew curl 8.23.0. A controlled process-local library override
-also made the same Git executable load libcurl 8.23.0: it cloned over
-HTTP/2 and pulled a second hosted publication without an HTTP-version
-setting. The loaded library was checked with the dynamic loader's
-diagnostics. This isolates a client-library compatibility problem; it
-does not establish a durable repair of the normal Git installation or
-compatibility of every Git build. Upstream reports a related HTTP/2
-error-handling regression in
+A live synthetic trial reproduced a hanging plain `git clone` with an
+older Homebrew Git 2.56.0 package linked to Apple's libcurl 8.7.1.
+Expected 404 probes for missing loose objects and alternates triggered
+HTTP/2 errors and corrupted subsequent headers. Partlet publishes packed
+objects, so those probes are normal Git transport behavior. Upstream
+reports a related error-handling regression in
 [curl issue 13411](https://github.com/curl/curl/issues/13411).
 
-For an affected client, interrupt the stalled clone and use a fresh
-destination with HTTP/1.1:
+**Upgrade Git itself.** Homebrew Git `2.56.0_2` switched to maintained
+curl. That package, linked to libcurl 8.23.0, passed a fresh clone and
+an incremental pull after another hosted publication, negotiating HTTP/2
+with no HTTP-version settings or loader overrides. See the
+[Homebrew package change](https://github.com/Homebrew/homebrew-core/commit/5af25e905526dc43c557a3d2a5e2ef14e4bfe60b).
+
+For a Homebrew installation:
+
+```bash
+brew update
+brew upgrade git
+hash -r
+```
+
+Check the installed package revision and the library used by the active
+Git HTTP helper:
+
+```bash
+brew list --versions git
+git version --build-options
+otool -L "$(git --exec-path)/git-remote-https"
+```
+
+The verified package reports `git 2.56.0_2` and links
+`/opt/homebrew/opt/curl/lib/libcurl.4.dylib`. The prefix can differ on
+other installations. `git --version` alone reports `2.56.0` for both
+package revisions. Updating standalone curl does not change Git's
+existing system-library linkage.
+
+Retry a fresh plain clone after upgrading. For an existing clone where
+you saved the temporary HTTP/1.1 setting, remove it before verifying a
+pull after a new publication:
+
+```bash
+git -C YOUR_CLONE config --unset http.version
+```
+
+Run that unset command only if the clone has the setting; an absent key
+returns a nonzero status. Verification also requires no global or
+per-command HTTP-version setting and no diagnostic loader override.
+
+If upgrading is unavailable, a temporary workaround is a fresh clone
+using HTTP/1.1:
 
 ```bash
 git -c http.version=HTTP/1.1 clone \
@@ -99,34 +129,12 @@ clone, set it locally:
 git -C YOUR_CLONE config http.version HTTP/1.1
 ```
 
-These commands do not change the global Git configuration. To remove the
-workaround after verifying a working client:
-
-```bash
-git -C YOUR_CLONE config --unset http.version
-```
-
-Check the library Git actually uses before choosing a client update:
-
-```bash
-git version --build-options
-otool -L "$(git --exec-path)/git-remote-https"
-```
-
-The reproduced Homebrew Git used `/usr/lib/libcurl.4.dylib` even though
-a newer standalone curl was installed. Updating the `curl` executable
-alone does not change that linkage. Build-options output describes the
-build; a loader override can change the runtime library without updating
-that output. A durable client repair must make Git use a working libcurl
-in normal operation, then pass plain clone and a pull after a new
-publication without HTTP-version or diagnostic loader overrides.
-
-This is a workaround, not a completed compatibility fix. The requirement
-for
-[plain clone and pull without client configuration](QUALITY.md#what-quality-means-here)
-remains in force. Local HTTP smoke tests do not cover Cloudflare's
-HTTP/2 connection behavior; track the remaining investigation as
-`macos-http2-default-clone` in [deferred work](../TODO.md).
+These workaround commands do not change the global Git configuration.
+The upgraded package meets the
+[plain clone and pull requirement](QUALITY.md#what-quality-means-here)
+for the verified client; the temporary workaround alone does not. Other
+Git/library combinations need their own verification. Local HTTP smoke
+tests do not cover Cloudflare's HTTP/2 connection behavior.
 
 ## Configuration and credentials
 
