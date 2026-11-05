@@ -146,8 +146,10 @@ def load_config(path: Path, *, deploy: bool = False) -> WorkerConfig:
         if deploy:
             _configured(domain, "routes.pattern")
         domains.append(domain)
-    if deploy and not domains:
-        raise WorkerError("deployment needs at least one custom-domain route")
+    if deploy and not domains and data.get("workers_dev") is not True:
+        raise WorkerError(
+            "deployment needs a custom-domain route or workers_dev = true"
+        )
     return WorkerConfig(path, data, name, source, bucket, tuple(domains))
 
 
@@ -157,10 +159,13 @@ def init_config(
     name: str = "partlet",
     source: str = "replace-me",
     bucket: str = "replace-me",
-    domain: str = "partlet.replace-me.example",
+    domain: str | None = None,
+    workers_dev: bool = False,
     account_id: str | None = None,
 ) -> Path:
     """Create an editable config without pinning paths to this installation."""
+    if workers_dev and domain is not None:
+        raise WorkerError("choose either workers.dev or a custom domain")
     directory = directory.expanduser().absolute()
     if directory.is_symlink():
         raise WorkerError("choose a deployment directory that is not a symlink")
@@ -177,7 +182,7 @@ def init_config(
     config = {
         "name": name,
         "compatibility_date": compatibility,
-        "workers_dev": False,
+        "workers_dev": workers_dev,
         "preview_urls": False,
     }
     if account_id is not None:
@@ -185,8 +190,11 @@ def init_config(
     config.update(
         vars={"SOURCE": source},
         r2_buckets=[{"binding": "BUCKET", "bucket_name": bucket}],
-        routes=[{"pattern": domain, "custom_domain": True}],
     )
+    if not workers_dev:
+        config["routes"] = [
+            {"pattern": domain or "partlet.replace-me.example", "custom_domain": True}
+        ]
     text = (
         "# Your deployment settings. Partlet supplies the installed Worker code.\n"
         "# Keep this file when upgrading Partlet; do not add a main entry point.\n"
@@ -198,7 +206,12 @@ def init_config(
     with (directory / ".gitignore").open("x", encoding="utf-8") as stream:
         stream.write(".partlet/\n")
     path = directory / "wrangler.toml"
-    print(f"Created {path}. Set SOURCE, bucket_name and your domain before deploying.")
+    choices = (
+        "SOURCE and bucket_name"
+        if workers_dev
+        else "SOURCE, bucket_name and your domain"
+    )
+    print(f"Created {path}. Set {choices} before deploying.")
     return path
 
 
@@ -258,6 +271,7 @@ def run_worker(args, *, confirm: Callable[[str], bool]) -> int:
             source=args.source,
             bucket=args.bucket,
             domain=args.domain,
+            workers_dev=args.workers_dev,
             account_id=args.account_id,
         )
         return 0
@@ -275,10 +289,13 @@ def run_worker(args, *, confirm: Callable[[str], bool]) -> int:
     local = not deploy or args.dry_run
     if deploy and not args.dry_run:
         account = config.data.get("account_id", "Wrangler's authenticated account")
+        targets = list(config.domains)
+        if config.data.get("workers_dev") is True:
+            targets.append("this Worker's workers.dev address")
         print(
             f"Billable: deploy Worker {config.name!r}, bound to existing R2 bucket "
             f"{config.bucket!r}, SOURCE {config.source!r}, on "
-            f"{', '.join(config.domains)}, using account {account}."
+            f"{', '.join(targets)}, using account {account}."
         )
         if not args.yes and not confirm("Deploy this Worker to Cloudflare? [y/N] "):
             print("Deployment cancelled.")

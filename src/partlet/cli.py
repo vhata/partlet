@@ -79,8 +79,12 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--name", default="partlet", help="Cloudflare Worker name")
     init.add_argument("--source", default="replace-me", help="manifest site.source")
     init.add_argument("--bucket", default="replace-me", help="existing R2 bucket name")
-    init.add_argument(
-        "--domain", default="partlet.replace-me.example", help="custom domain"
+    address = init.add_mutually_exclusive_group()
+    address.add_argument("--domain", help="custom domain")
+    address.add_argument(
+        "--workers-dev",
+        action="store_true",
+        help="use Cloudflare's workers.dev address",
     )
     init.add_argument("--account-id", help="Cloudflare account ID")
     worker_sub.add_parser("login", help="log in to Cloudflare with Wrangler")

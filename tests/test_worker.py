@@ -114,6 +114,113 @@ def test_init_without_options_has_actionable_placeholders(runtime, tmp_path):
         worker.load_config(path)
 
 
+def test_init_workers_dev_has_no_custom_domain(runtime, tmp_path, capsys):
+    directory = tmp_path / "workers-dev"
+    assert (
+        main(
+            [
+                "worker",
+                "init",
+                str(directory),
+                "--workers-dev",
+                "--name",
+                "personal",
+                "--source",
+                "my-monorepo",
+                "--bucket",
+                "my-public-bucket",
+            ]
+        )
+        == 0
+    )
+    config = worker.load_config(directory / "wrangler.toml", deploy=True)
+    assert config.data["workers_dev"] is True
+    assert config.data["preview_urls"] is False
+    assert "routes" not in config.data
+    assert config.domains == ()
+    assert "domain before deploying" not in capsys.readouterr().out
+
+
+def test_init_workers_dev_and_domain_are_mutually_exclusive(runtime, tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        main(
+            [
+                "worker",
+                "init",
+                str(tmp_path / "site"),
+                "--workers-dev",
+                "--domain",
+                "code.example.com",
+            ]
+        )
+    assert exc.value.code == 2
+    assert not (tmp_path / "site").exists()
+    with pytest.raises(worker.WorkerError, match="either"):
+        worker.init_config(
+            tmp_path / "site", domain="code.example.com", workers_dev=True
+        )
+
+
+@pytest.mark.parametrize("workers_dev", [None, False, True])
+def test_deployment_without_routes_requires_workers_dev(config, workers_dev):
+    text = config.read_text().split("[[routes]]")[0]
+    if workers_dev is None:
+        text = text.replace("workers_dev = false\n", "")
+    elif workers_dev:
+        text = text.replace("workers_dev = false", "workers_dev = true")
+    config.write_text(text)
+    if workers_dev:
+        assert worker.load_config(config, deploy=True).domains == ()
+    else:
+        with pytest.raises(worker.WorkerError, match="route or workers_dev"):
+            worker.load_config(config, deploy=True)
+
+
+def test_preview_urls_do_not_replace_a_public_site_address(config):
+    config.write_text(
+        config.read_text()
+        .split("[[routes]]")[0]
+        .replace("preview_urls = false", "preview_urls = true")
+    )
+    with pytest.raises(worker.WorkerError, match="route or workers_dev"):
+        worker.load_config(config, deploy=True)
+
+
+def test_workers_dev_cancellation_reports_real_target_identity(
+    runtime, tmp_path, monkeypatch, capsys
+):
+    config = worker.init_config(
+        tmp_path / "site",
+        name="personal",
+        source="my-monorepo",
+        bucket="my-public-bucket",
+        workers_dev=True,
+        account_id="a" * 32,
+    )
+    calls = capture_runs(monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    assert main(["worker", "deploy", "--config", str(config)]) == 1
+    output = capsys.readouterr().out
+    for identity in (
+        "Billable",
+        "personal",
+        "my-monorepo",
+        "my-public-bucket",
+        "a" * 32,
+        "workers.dev",
+    ):
+        assert identity in output
+    assert "https://personal" not in output
+    assert not calls
+
+
+def test_workers_dev_and_custom_domain_remain_valid_together(config):
+    change(config, "workers_dev = false", "workers_dev = true")
+    loaded = worker.load_config(config, deploy=True)
+    assert loaded.domains == ("code.example.com",)
+    assert loaded.data["workers_dev"] is True
+
+
 def test_init_expands_home_before_refusing_directory_symlinks(
     runtime, tmp_path, monkeypatch
 ):
