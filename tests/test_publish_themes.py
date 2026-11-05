@@ -1,5 +1,6 @@
 """Theme publication preserves Git state and every advertised stylesheet."""
 
+import base64
 import json
 import re
 from dataclasses import replace
@@ -16,7 +17,7 @@ from partlet.store import LocalStore, StoreError
 
 
 def manifest(approved, theme="classic", mode="auto"):
-    return parse_manifest(f"""+[site]
+    return parse_manifest(f"""[site]
 source = "s"
 base_url = "https://partlet.example"
 [site.theme]
@@ -280,3 +281,134 @@ def test_same_build_repairs_missing_theme_resources(mono, tmp_path, prepared):
     store.delete(resource_key(theme))
     assert run(mono, tmp_path, store, config)[0].status == "unchanged"
     assert store.get(resource_key(theme)) is not None
+
+
+def test_metadata_failure_cannot_advertise_new_index(
+    mono, tmp_path, prepared, monkeypatch
+):
+    config, store = prepared
+    run(mono, tmp_path, store, config)
+    old_index = store.get("s/index.html")
+    old_record = store.get("s/site-theme.json")
+    theme = resolve_theme(ThemeConfig(name="paper"))
+    original_put = store.put
+
+    def fail_metadata(key, data, content_type=None):
+        if key == "s/site-theme.json":
+            raise StoreError("metadata interrupted")
+        original_put(key, data, content_type)
+
+    with monkeypatch.context() as mp:
+        mp.setattr(store, "put", fail_metadata)
+        with pytest.raises(StoreError, match="metadata interrupted"):
+            write_site_index(store, config.site, theme)
+    assert store.get("s/index.html") == old_index
+    assert store.get("s/site-theme.json") == old_record
+    assert store.get(resource_key(theme)) is not None
+    write_site_index(store, config.site, theme)
+    assert stylesheet(store.get("s/index.html")) == theme.stylesheet_url.encode()
+
+
+def test_unpublish_completes_presentation_after_interrupted_index_write(
+    mono, tmp_path, prepared, monkeypatch
+):
+    config, store = prepared
+    run(mono, tmp_path, store, config)
+    old_index = store.get("s/index.html")
+    theme = resolve_theme(ThemeConfig(name="paper"))
+    original_put = store.put
+
+    def fail_index(key, data, content_type=None):
+        if key == "s/index.html":
+            raise StoreError("index interrupted")
+        original_put(key, data, content_type)
+
+    with monkeypatch.context() as mp:
+        mp.setattr(store, "put", fail_index)
+        with pytest.raises(StoreError, match="index interrupted"):
+            write_site_index(store, config.site, theme)
+    assert store.get("s/index.html") == old_index
+    assert json.loads(store.get("s/site-theme.json"))["digest"] == theme.digest
+    unpublish_project(store, config.site, "foo")
+    assert stylesheet(store.get("s/index.html")) == theme.stylesheet_url.encode()
+
+
+def custom_pack(mono):
+    mono.write(
+        "themes/custom/theme.toml",
+        'id = "custom"\nname = "Custom theme"\nversion = "1.0"\n'
+        'format_version = 1\nmodes = ["auto", "light", "dark"]\n'
+        'license = "MIT"\nassets = ["assets/logo.png"]\n',
+    )
+    mono.write(
+        "themes/custom/style.css",
+        ':root { --link: #123456; }\nheader.top { background-image: url("assets/logo.png"); }\n',
+    )
+    image = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO2cAAAAASUVORK5CYII="
+    )
+    mono.write("themes/custom/assets/logo.png", image)
+    mono.write("themes/custom/notes.txt", "PRIVATE_THEME_NOTES\n")
+    mono.write("themes/custom/LICENSE", "Example license provenance\n")
+    mono.commit("vendored theme")
+    return ThemeConfig(name=None, path="themes/custom")
+
+
+def test_vendored_assets_are_explicit_public_inputs(mono, tmp_path, prepared):
+    config, store = prepared
+    selected = custom_pack(mono)
+    themed = replace(config, site=replace(config.site, theme=selected))
+    theme = resolve_theme(selected, mono.path)
+    assert run(mono, tmp_path, store, themed)[0].status == "published"
+    assert set(store.list(f"s/static/themes/{theme.digest}/")) == {
+        resource_key(theme, "style.css"),
+        resource_key(theme, "assets/logo.png"),
+    }
+    for resource in theme.resources:
+        assert store.get(resource_key(theme, resource.path)) == resource.data
+    assert all(b"PRIVATE_THEME_NOTES" not in store.get(key) for key in store.list(""))
+    old = current(store)
+    git_before = {key: store.get(key) for key in store.list("s/p/foo/git/")}
+    image_path = mono.path / "themes/custom/assets/logo.png"
+    image_path.write_bytes(image_path.read_bytes() + b"theme asset changed")
+    mono.commit("change theme asset only")
+    changed = resolve_theme(selected, mono.path)
+    assert changed.digest != theme.digest
+    assert run(mono, tmp_path, store, themed)[0].status == "published"
+    assert current(store)["tip"] == old["tip"]
+    assert current(store)["build"] != old["build"]
+    assert {key: store.get(key) for key in store.list("s/p/foo/git/")} == git_before
+    assert store.get(resource_key(theme, "assets/logo.png")) is not None
+
+
+def test_commit_changing_during_upload_cannot_mix_theme_versions(
+    mono, tmp_path, prepared, monkeypatch
+):
+    config, store = prepared
+    selected = custom_pack(mono)
+    themed = replace(config, site=replace(config.site, theme=selected))
+    original = resolve_theme(selected, mono.path)
+    original_put = store.put
+    mutated = False
+
+    def change_commit_on_upload(key, data, content_type=None):
+        nonlocal mutated
+        if not mutated and key.startswith("s/static/themes/"):
+            mutated = True
+            path = mono.path / "themes/custom/style.css"
+            path.write_text(path.read_text().replace("#123456", "#654321"))
+            mono.commit("new theme while publisher is running")
+        original_put(key, data, content_type)
+
+    monkeypatch.setattr(store, "put", change_commit_on_upload)
+    assert run(mono, tmp_path, store, themed)[0].status == "published"
+    assert mutated
+    assert json.loads(store.get("s/site-theme.json"))["digest"] == original.digest
+    assert stylesheet(store.get("s/index.html")) == original.stylesheet_url.encode()
+    for resource in original.resources:
+        assert store.get(resource_key(original, resource.path)) == resource.data
+    changed = resolve_theme(selected, mono.path)
+    assert changed.digest != original.digest
+    assert store.get(resource_key(changed)) is None
+    assert run(mono, tmp_path, store, themed)[0].status == "published"
+    assert json.loads(store.get("s/site-theme.json"))["digest"] == changed.digest

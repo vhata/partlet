@@ -32,7 +32,14 @@ from partlet.publish import (
 from partlet.review import ReviewError, fetch_published_tip, run_review
 from partlet.scan import ScanError, Scanner
 from partlet.site.themes import BUILTIN_THEMES, ResolvedTheme, ThemeError, resolve_theme
-from partlet.store import LocalStore, R2Config, R2Store, Store, StoreError
+from partlet.store import (
+    LocalPathError,
+    LocalStore,
+    R2Config,
+    R2Store,
+    Store,
+    StoreError,
+)
 from partlet.summary import summary_markdown, write_summary
 from partlet.tools import ToolError, check_tools
 
@@ -422,7 +429,7 @@ def _publish_into(
             results = publish_all(
                 repo, manifest, store, Path(tmp), scanner, theme=theme
             )
-    except (LockError, StoreError, OSError) as e:
+    except (LockError, StoreError, LocalPathError, OSError) as e:
         print(f"partlet: {e}", file=sys.stderr)
         _save_summary(summary, summary_markdown(title, [], versions, error=str(e)))
         return 1
@@ -448,14 +455,28 @@ def _build(args: argparse.Namespace) -> int:
     try:
         manifest_path = _manifest_path(args)
         manifest = load_manifest(manifest_path)
+        if args.require_committed:
+            # The Action's local output mode exercises the same committed
+            # input gate as production instead of ordinary preview semantics.
+            check_checkout(
+                repo, manifest.site.branch, manifest_path, expected_manifest=manifest
+            )
         theme = resolve_theme(
             manifest.site.theme,
             repo,
             branch=manifest.site.branch,
             manifest_path=manifest_path,
+            require_clean=args.require_committed,
         )
         tools = check_tools(gitleaks=args.scan)
-    except (ManifestError, ThemeError, ToolError, OSError, UnicodeError) as e:
+    except (
+        ManifestError,
+        CheckoutError,
+        ThemeError,
+        ToolError,
+        OSError,
+        UnicodeError,
+    ) as e:
         return _error(e)
     scanner = Scanner(tools.gitleaks, repo) if tools.gitleaks else None
     return _publish_into(
@@ -705,9 +726,10 @@ COMMANDS = {
 }
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, require_committed: bool = False) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
+    args.require_committed = require_committed
     if args.command is None:
         parser.print_help()
         return 0

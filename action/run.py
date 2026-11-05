@@ -18,6 +18,7 @@ from partlet.cli import main
 from partlet.gitutil import GitError, git, git_out
 from partlet.manifest import ManifestError, load_manifest
 from partlet.publish import CheckoutError, check_checkout
+from partlet.site.themes import ThemeError, resolve_theme
 
 
 def prepare() -> None:
@@ -48,6 +49,13 @@ def prepare() -> None:
         # Atomic create; never overwrite a publishing branch that already exists.
         git("update-ref", ref, remote, "", cwd=repo)
     check_checkout(repo, branch, path, expected_manifest=manifest)
+    resolve_theme(
+        manifest.site.theme,
+        repo,
+        branch=branch,
+        manifest_path=path,
+        require_clean=True,
+    )
 
 
 def run() -> int:
@@ -65,9 +73,19 @@ def run() -> int:
             for key in ("PARTLET_R2_ACCESS_KEY_ID", "PARTLET_R2_SECRET_ACCESS_KEY"):
                 os.environ.pop(key, None)
             prepare()
-            return main(["build", "--scan", "--manifest", manifest, "--out", local])
+            return main(
+                ["build", "--scan", "--manifest", manifest, "--out", local],
+                require_committed=True,
+            )
         return main(["publish", "--manifest", manifest])
-    except (CheckoutError, GitError, ManifestError, OSError, ValueError) as exc:
+    except (
+        CheckoutError,
+        GitError,
+        ManifestError,
+        ThemeError,
+        OSError,
+        ValueError,
+    ) as exc:
         print(f"partlet action: {exc}", file=sys.stderr)
         return 2
 

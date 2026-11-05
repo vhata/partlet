@@ -219,3 +219,76 @@ def test_consumer_workflow_serializes_publications_and_removes_checkout_credenti
     assert checkout["with"] == {"fetch-depth": "0", "persist-credentials": "false"}
     assert re.fullmatch(r"actions/checkout@[0-9a-f]{40}", checkout["uses"])
     assert "@PARTLET_RELEASE_SHA" in job["steps"][1]["uses"]
+
+
+def configure_custom_theme(mono):
+    mono.write(
+        "themes/custom/theme.toml",
+        'id = "custom"\nname = "Custom theme"\nversion = "1.0"\n'
+        'format_version = 1\nmodes = ["auto", "light", "dark"]\n'
+        'license = "MIT"\nassets = []\n',
+    )
+    mono.write("themes/custom/style.css", ":root { --link: #123456; }\n")
+    mono.write("themes/custom/LICENSE", "Example license provenance\n")
+    path = mono.path / "partlet.toml"
+    path.write_text(
+        path.read_text() + '\n[site.theme]\npath = "themes/custom"\nmode = "dark"\n'
+    )
+    mono.commit("vendored theme")
+
+
+@pytest.mark.parametrize("local", [True, False])
+def test_actual_action_publishes_committed_custom_theme(
+    checkout, tmp_path, r2_config, local
+):
+    mono, tip = checkout
+    configure_custom_theme(mono)
+    environment = {
+        "PARTLET_R2_ENDPOINT": r2_config.endpoint_url,
+        "PARTLET_R2_BUCKET": r2_config.bucket,
+        "PARTLET_R2_ACCESS_KEY_ID": FAKE_R2_KEY_ID,
+        "PARTLET_R2_SECRET_ACCESS_KEY": FAKE_R2_SECRET,
+    }
+    if local:
+        environment["LOCAL_OUT"] = str(tmp_path / "out")
+    result = run_step("Publish", mono.path, **environment)
+    assert result.returncode == 0, result.stdout + result.stderr
+    if local:
+        from partlet.store import LocalStore
+
+        store = LocalStore(tmp_path / "out")
+    else:
+        store = R2Store(r2_config)
+    record = json.loads(store.get("s/site-theme.json"))
+    assert record["name"] == "custom" and record["mode"] == "dark"
+    assert b"#123456" in store.get(f"s/static/themes/{record['digest']}/style.css")
+    current = json.loads(store.get("s/p/foo/current"))
+    assert current["tip"] == tip
+    assert record["digest"].encode() in store.get(
+        f"s/p/foo/site/{current['build']}/index.html"
+    )
+
+
+@pytest.mark.parametrize("local", [True, False])
+def test_actual_action_rejects_dirty_custom_theme_before_writes(
+    checkout, tmp_path, r2_config, local
+):
+    mono, _ = checkout
+    configure_custom_theme(mono)
+    mono.write("themes/custom/style.css", ":root { --link: #654321; }\n")
+    environment = {
+        "PARTLET_R2_ENDPOINT": r2_config.endpoint_url,
+        "PARTLET_R2_BUCKET": r2_config.bucket,
+        "PARTLET_R2_ACCESS_KEY_ID": FAKE_R2_KEY_ID,
+        "PARTLET_R2_SECRET_ACCESS_KEY": FAKE_R2_SECRET,
+    }
+    if local:
+        environment["LOCAL_OUT"] = str(tmp_path / "out")
+    prepare = run_step("Prepare publishing checkout", mono.path)
+    assert prepare.returncode == 2
+    assert "differs" in prepare.stderr
+    result = run_step("Publish", mono.path, **environment)
+    assert result.returncode == 2
+    assert "differs" in result.stderr
+    assert R2Store(r2_config).list("s/") == []
+    assert not (tmp_path / "out").exists()

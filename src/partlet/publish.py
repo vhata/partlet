@@ -224,12 +224,16 @@ def publish_project(
                     ".gitleaks.toml or .gitleaksignore",
                 )
 
+        # Theme assets are immutable and must exist before any page or live
+        # pointer can reference them. Validate their local key identities
+        # before writing Git objects as well as the theme resources.
+        _upload_theme(store, site, theme)
+
         # Refs may have moved before an interrupted first HEAD write. Repair
         # only that missing file, after scanning and without rewriting packs.
         if missing_head:
             store.put(head_key, b"ref: refs/heads/main\n")
         if same_build:
-            _upload_theme(store, site, theme)
             _sweep(store, prefix)
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
 
@@ -246,9 +250,6 @@ def publish_project(
                 full=decision.action == "rewrite",
             )
 
-        # Theme assets are immutable and must exist before any page or live
-        # pointer can reference them. They live outside the project sweep.
-        _upload_theme(store, site, theme)
         for key, data in rendered.items():
             store.put(f"{prefix}/site/{build}/{key}", data)
         for fmt, data in make_archives(repo, project.name, tip).items():
