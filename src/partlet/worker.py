@@ -249,7 +249,7 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str]) -> int:
 
 
 @contextmanager
-def _session(config: WorkerConfig, purpose: str):
+def _session(config: WorkerConfig, purpose: str, *, data: dict | None = None):
     state = config.path.parent / ".partlet"
     if state.is_symlink():
         raise WorkerError(f"refusing symlinked state directory {state}")
@@ -259,8 +259,58 @@ def _session(config: WorkerConfig, purpose: str):
         # Never let .env/.dev.vars, a package build or Wrangler's generated
         # config redirect in the user's directory change the chosen operation.
         effective = directory / "wrangler.toml"
-        effective.write_text(tomlkit.dumps(config.data), encoding="utf-8")
+        effective.write_text(
+            tomlkit.dumps(config.data if data is None else data), encoding="utf-8"
+        )
         yield directory, effective
+
+
+def _create_bucket(args, config: WorkerConfig, wrangler: str, confirm) -> int:
+    account = config.data.get("account_id")
+    if account is None:
+        raise WorkerError(
+            "set account_id in your Worker configuration before creating a bucket"
+        )
+    print(
+        f"Billable: create R2 bucket {config.bucket!r} in Cloudflare account "
+        f"{account}, using standard storage and the default jurisdiction. "
+        "Direct public bucket access remains disabled."
+    )
+    if not args.yes and not confirm("Create this R2 bucket on Cloudflare? [y/N] "):
+        print("Bucket creation cancelled.")
+        return 1
+    # Keep account selection and API endpoints independent of ambient selectors,
+    # while retaining the credentials used by Wrangler's normal login flow.
+    env = _env(local=True)
+    for key in (
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_API_KEY",
+        "CLOUDFLARE_EMAIL",
+        "CF_API_TOKEN",
+        "CF_API_KEY",
+        "CF_EMAIL",
+    ):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    env["CLOUDFLARE_ACCOUNT_ID"] = account
+    with _session(config, "bucket-create", data={"account_id": account}) as (
+        session,
+        effective,
+    ):
+        return _run(
+            [
+                wrangler,
+                "r2",
+                "bucket",
+                "create",
+                config.bucket,
+                "--config",
+                str(effective),
+                "--update-config=false",
+            ],
+            cwd=session,
+            env=env,
+        )
 
 
 def run_worker(args, *, confirm: Callable[[str], bool]) -> int:
@@ -283,6 +333,10 @@ def run_worker(args, *, confirm: Callable[[str], bool]) -> int:
     wrangler = str(root / "node_modules" / ".bin" / "wrangler")
     if args.worker_command in ("login", "whoami"):
         return _run([wrangler, args.worker_command], cwd=root, env=_env(local=False))
+
+    if args.worker_command == "bucket-create":
+        config = load_config(args.config)
+        return _create_bucket(args, config, wrangler, confirm)
 
     deploy = args.worker_command == "deploy"
     config = load_config(args.config, deploy=deploy)
