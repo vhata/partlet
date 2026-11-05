@@ -1,7 +1,9 @@
 # Partlet Worker: serves one source's published projects from R2, read-only.
 # The user deploys it (npx wrangler deploy, from this directory) after
-# replacing the three replace-me values; see worker/README.md. Agents never
-# deploy it or provision the bucket, Worker or domain.
+# choosing an address and replacing placeholders; see docs/GETTING_STARTED.md.
+# For workers.dev, remove the whole [[routes]] block and add workers_dev = true
+# here at the top level, before [vars].
+# Agents never deploy it or provision the bucket, Worker or domain.
 name = "partlet"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
@@ -16,5 +18,8 @@ binding = "BUCKET"
 bucket_name = "replace-me"
 
 [[routes]]
+# Custom domain: one exact hostname you choose on your Cloudflare-managed
+# domain, with no scheme, path or wildcard. All paths go to this Worker;
+# Cloudflare manages DNS and HTTPS. Omit this whole block for workers.dev.
 pattern = "partlet.replace-me.example"
 custom_domain = true

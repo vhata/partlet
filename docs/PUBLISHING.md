@@ -173,12 +173,21 @@ Partlet version you selected, and `main` if your publishing branch has
 another name. Use the same Partlet version locally for review. You do
 not need to create release tags in Partlet to use the Action.
 
-Keep `fetch-depth: 0`, `persist-credentials: false`, read-only workflow
-permissions and `cancel-in-progress: false`. All workflows publishing
-the same source must use the same concurrency group. Avoid pull-request
-triggers: publication requires HEAD at the local publishing branch tip
-and an exactly committed manifest. The source lock also covers callers
-outside this workflow and never expires automatically.
+The workflow first runs `actions/checkout` to download the source
+repository, then `vhata/partlet` to publish from that checkout. Each
+step's `with:` block configures only that action. Keep `fetch-depth: 0`
+and `persist-credentials: false` in **the checkout step's `with:`
+block**; they control Git history and checkout's GitHub credentials. The
+Partlet step's `with:` block takes the publishing inputs listed below,
+including the separate R2 credentials. The first-site guide
+[maps each setting to its location](GETTING_STARTED.md#4-add-the-publishing-workflow).
+
+Keep workflow-level `permissions` set to `contents: read` and
+`concurrency` set to `cancel-in-progress: false`. All workflows
+publishing the same source must use the same concurrency group. Avoid
+pull-request triggers: publication requires HEAD at the local publishing
+branch tip and an exactly committed manifest. The source lock also
+covers callers outside this workflow and never expires automatically.
 
 The Action supports Linux x64 and ARM64 runners; the example uses
 `ubuntu-24.04`. A detached checkout is supported if it equals the

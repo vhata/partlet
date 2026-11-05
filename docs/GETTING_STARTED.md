@@ -19,13 +19,13 @@ branch `main`, bucket `my-partlet-public`, and site
 | -- | -- |
 | `my-monorepo` | Manifest `site.source`, Worker `SOURCE`, workflow concurrency suffix |
 | `my-partlet-public` | Worker `bucket_name`, GitHub `PARTLET_R2_BUCKET` secret |
-| `code.example.com` | Manifest `base_url` host, Worker custom-domain route |
+| `code.example.com` | Example site hostname; use your chosen `workers.dev` or custom hostname in manifest `base_url` and all URLs below |
 | `main` | Manifest `site.branch`, workflow push branch |
 
 R2 storage and Worker hosting are **billable**. The commands below are
 for you to run in your own account; they create a bucket and deploy a
-Worker on your domain. You can start with a harmless demonstration
-project before exposing real history.
+Worker at your chosen public address. You can start with a harmless
+demonstration project before exposing real history.
 
 ## 1. Install the deployment tools
 
@@ -47,11 +47,9 @@ locally and preserve it when updating your checkout.
 
 ## 2. Create storage and deploy the public site
 
-Choose a hostname in a domain already managed in your Cloudflare
-account, such as `code.example.com`. The Worker will serve the entire
-hostname; choose one dedicated to Partlet. Cloudflare's
-[Custom Domains guide](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
-describes the zone requirements and DNS/certificate setup.
+Your site needs a public address. You can use Cloudflare's default
+`workers.dev` address without owning a domain, or a hostname on a domain
+you own. Choose one of the configurations below before deploying.
 
 From the Partlet checkout, log in and confirm the account:
 
@@ -73,9 +71,60 @@ the Worker. Partlet manages and cleans up objects under its source
 prefix, so keep unrelated files outside that prefix.
 
 Edit [worker/wrangler.toml](../worker/wrangler.toml) in your Partlet
-checkout. Replace all three `replace-me` values:
+checkout. In either configuration, set `SOURCE` to the manifest's
+`site.source` and `bucket_name` to the bucket you just created. Keep
+`binding = "BUCKET"`, `main`, and the compatibility date. The default
+Worker name is `partlet`; change `name` if you need to avoid replacing
+an existing Worker with that name. If you have several Cloudflare
+accounts, set the intended top-level `account_id` too.
+
+### Option A: Use Cloudflare's default `workers.dev` address
+
+In the Cloudflare dashboard, open **Workers & Pages** and find **Your
+subdomain**. Choose or change it there if needed. With Worker name
+`partlet` and account subdomain `my-account`, your site's address is
+`https://partlet.my-account.workers.dev`. The account subdomain is
+separate from your account ID and Partlet's `SOURCE`.
+
+Remove the entire `[[routes]]` block, including `pattern` and
+`custom_domain`. Set `workers_dev = true` at the top level, before
+`[vars]` or any other table. Your configuration should look like this:
 
 ```toml
+name = "partlet"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+SOURCE = "my-monorepo"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "my-partlet-public"
+```
+
+Cloudflare derives this address from `name` and your account subdomain;
+you do not put a `workers.dev` hostname in `pattern`. See Cloudflare's
+[`workers.dev` guide](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
+for account subdomain settings.
+
+### Option B: Use a hostname on your own domain
+
+Choose a hostname such as `code.example.com` under a domain already
+active in your Cloudflare account. You choose the `code` part; replace
+`example.com` with your own domain. Dedicate this hostname to Partlet,
+since the Worker will serve every path on it. Do not use a hostname
+already serving another site or one with an existing CNAME record.
+
+Use this configuration, replacing `code.example.com` with that hostname:
+
+```toml
+name = "partlet"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
 [vars]
 SOURCE = "my-monorepo"
 
@@ -88,10 +137,27 @@ pattern = "code.example.com"
 custom_domain = true
 ```
 
-Keep the file's other settings, including `main` and the compatibility
-date. The default Worker name is `partlet`; change `name` if you need to
-avoid replacing an existing Worker with that name. If you have several
-Cloudflare accounts, set the intended top-level `account_id` too.
+The last three lines tell Cloudflare where to serve the site:
+
+- `[[routes]]` adds an address for the Worker. The double brackets are
+  TOML syntax for an entry in a list; one hostname needs one entry.
+- `custom_domain = true` tells Cloudflare to connect that hostname
+  directly to the Worker and manage its DNS record and HTTPS
+  certificate. All paths on the hostname go to this Worker.
+- `pattern` is Cloudflare's shared field name for routing addresses.
+  **With `custom_domain = true`, its value is one exact hostname**:
+  `code.example.com`, with no `https://`, path, trailing slash, or `*`.
+  In Cloudflare's other routing mode, this field can hold a wildcard URL
+  pattern such as `example.com/*`, which is why it has that name.
+
+Setting `custom_domain = false` selects that other routing mode; it does
+not select a `workers.dev` address. Use Option A for that.
+`workers_dev = false` here disables the additional default address.
+Cloudflare's
+[Custom Domains guide](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
+explains hostname requirements and DNS/certificate setup.
+
+### Deploy and record your site's URL
 
 Deploy from `worker/` after checking those choices:
 
@@ -99,10 +165,19 @@ Deploy from `worker/` after checking those choices:
 WRANGLER_SEND_METRICS=false node_modules/.bin/wrangler deploy
 ```
 
-Confirm the deployment's domain and R2 binding in Cloudflare. The site
-has no content until the first publish; a 404 at this point is expected.
-For an upgrade from an older deployment, wait at least 60 seconds after
-deploying before publishing so old cached Git metadata can expire.
+Wrangler prints the deployed URL. You can also find it by opening your
+Worker in Cloudflare under **Settings → Domains & Routes**. Confirm that
+address and its R2 binding. In your source repository's `partlet.toml`,
+set `site.base_url` to that full HTTPS URL, for example
+`https://partlet.my-account.workers.dev` for Option A or
+`https://code.example.com` for Option B. This is the URL Partlet puts in
+pages and clone links. Use it wherever the rest of this guide shows
+`https://code.example.com`.
+
+The site has no content until the first publish; a 404 at this point is
+expected. For an upgrade from an older deployment, wait at least 60
+seconds after deploying before publishing so old cached Git metadata can
+expire.
 
 ## 3. Give the publisher access to its bucket
 
@@ -147,21 +222,42 @@ cp "$PARTLET_DIR/examples/partlet.yml" \
   "$SOURCE_REPO/.github/workflows/partlet.yml"
 ```
 
-Edit that copy:
+The file describes a GitHub Actions workflow with two steps, run in
+order:
 
-- Replace `PARTLET_RELEASE_SHA` in `uses: vhata/partlet@...` with the
-  full Partlet commit hash recorded in step 1. It is the Partlet code
-  version, separate from your project's generated `approved` hash.
-- Replace `SOURCE` in `group: partlet-SOURCE` with `my-monorepo`.
-- If your publishing branch differs, replace `main` in `branches` with
-  the manifest's `site.branch`.
+1. `uses: actions/checkout@...` downloads your **source repository**
+   onto the runner, including its Git history and `partlet.toml`.
+1. `uses: vhata/partlet@...` publishes the approved projects from that
+   checkout to R2. It installs Partlet's tools on the Linux runner, so
+   you do not need a separate installation step.
 
-Keep the full-history checkout (`fetch-depth: 0`), read-only workflow
-permissions, `persist-credentials: false`, and
-`cancel-in-progress: false`. Use this same concurrency group in any
-other workflows publishing the same source. Publish on branch pushes,
-rather than pull requests. The Action installs its own tools on the
-Linux runner; you do not need an installation step in this workflow.
+Each step's indented `with:` block supplies inputs to that step's
+action. **`fetch-depth` and `persist-credentials` belong under
+`actions/checkout`, where the example already puts them.** The
+`vhata/partlet` step's separate `with:` block supplies the R2
+credentials and bucket from your GitHub secrets.
+
+Make these three substitutions in the copy. The example marks them with
+`EDIT` comments:
+
+| Location in the workflow | What to edit |
+| -- | -- |
+| `on` → `push` → `branches` near the top | Replace `main` if your manifest's `site.branch` differs. |
+| Top-level `concurrency` → `group` | Replace `SOURCE` in `partlet-SOURCE` with your manifest's `site.source`, for example `partlet-my-monorepo`. |
+| Second step, `uses: vhata/partlet@PARTLET_RELEASE_SHA` | Replace `PARTLET_RELEASE_SHA` with the full Partlet commit hash recorded in step 1. This selects Partlet's code version; it is separate from your project's generated `approved` hash. |
+
+The remaining settings are already configured. Keep them in these
+locations:
+
+| Location in the workflow | Setting | Purpose |
+| -- | -- | -- |
+| First step, `actions/checkout` → `with` | `fetch-depth: 0` | Downloads the full Git history Partlet needs to export projects. |
+| First step, `actions/checkout` → `with` | `persist-credentials: false` | Keeps checkout's GitHub token out of the Git credentials available to later steps. |
+| Top-level `permissions` | `contents: read` | Gives the workflow's GitHub token read-only access to repository contents. R2 access comes from the separate publishing credentials. |
+| Top-level `concurrency` | `cancel-in-progress: false` | Lets an active publication finish when another run is queued. |
+
+Use this same concurrency group in any other workflows publishing the
+same source. Publish on branch pushes, rather than pull requests.
 
 For a jurisdiction-specific bucket, set the Action's optional `endpoint`
 input to its matching S3 endpoint. Further options are in the
