@@ -39,6 +39,9 @@ branch.
 | `site.base_url` | Required public site URL, including `https://`, used for links and clone URLs. |
 | `site.branch` | Source branch to export; defaults to `main`. It must exist locally. Match the workflow's push branch. |
 | `site.mailmap` | Optional path to an author/committer identity mapping file, relative to the source checkout. |
+| `site.theme.name` | Bundled theme: `classic` (default), `paper`, or `terminal`. Mutually exclusive with `site.theme.path`. |
+| `site.theme.path` | Vendored theme directory, relative to the manifest, committed on `site.branch`. |
+| `site.theme.mode` | `auto` (default), `light`, or `dark`. |
 | `projects.NAME.path` | Required current project directory, relative to the source root. |
 | `projects.NAME.description` | Optional description displayed on the site. |
 | `projects.NAME.previous_paths` | Optional list of earlier directory locations to include in the same export. Defaults to `[]`. |
@@ -101,6 +104,8 @@ installed external tools or cloud credentials.
 | `partlet publish --repo /path/to/source` | Scan and publish approved projects to R2 using the credentials below. |
 | `partlet unpublish foo --repo /path/to/source` | Confirm and delete the project's stored data, then rebuild the site index. |
 | `partlet unlock --repo /path/to/source` | Report the publisher lock holder and confirm removal of a stale lock. |
+| `partlet theme list` | List the bundled site themes without cloud access. |
+| `partlet theme check --repo /path/to/source` | Validate the selected theme using committed publishing-branch inputs. |
 
 `review` and `build` export the local `site.branch`, including its
 committed history; uncommitted project edits are not exported. Update
@@ -127,6 +132,11 @@ actual tool versions and bounded, escaped failure reasons. Configuration
 refusals exit 2; project, lock or store failures exit 1; successful,
 unchanged or skipped-only runs exit 0. Check individual outcomes: a
 green run with every project `skipped` has published nothing.
+
+See [Site themes](THEMES.md) for theme selection, third-party
+installation, local previews, compatibility and the public-asset
+contract. Deploy the matching Worker before publishing themed pages on
+an existing site.
 
 The installed tool also provides `partlet setup [--worker]` for explicit
 dependency installation, and `partlet worker` commands for independent

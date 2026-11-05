@@ -1,6 +1,7 @@
 # Site themes
 
-Status: proposed; implementation is queued in [TODO.md](../../TODO.md).
+Status: accepted design. See [Site themes](../THEMES.md) for usage and
+the theme-author contract.
 
 Partlet should let a publisher choose a bundled theme, adjust its
 appearance, or use a third-party theme without forking Partlet. Theme
@@ -9,7 +10,7 @@ GitHub Action produce the same site.
 
 ## Publisher experience
 
-Proposed configuration, not currently supported:
+Site configuration:
 
 ```toml
 [site.theme]
@@ -45,10 +46,9 @@ mode = "auto"
 formats, missing files and invalid options fail before publication with
 an actionable message; never silently substitute another theme.
 
-Proposed `partlet theme list` and `partlet theme check` commands expose
+The `partlet theme list` and `partlet theme check` commands expose
 bundled choices and validate the configured theme locally. Documentation
 must provide a complete example and screenshots of each bundled theme.
-Do not describe these commands as available until implemented.
 
 ## Theme contract
 
@@ -153,8 +153,8 @@ Action must resolve identical assets without network access.
    selection, fingerprinted publication and narrow Worker CSS routes.
    Test using the installed package and keep the default visually
    compatible.
-1. Add vendored third-party packs and their static asset routes once the
-   first stage has landed. Publish a small example distribution and a
+1. Build on that contract to add vendored third-party packs and their
+   static asset routes. Include a small example distribution and a
    theme-author guide showing how to install and adapt it.
 
 Both stages require meaningful render, manifest, publication and Worker
