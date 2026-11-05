@@ -1,9 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Projects{% endblock %}
 {% block main %}
-<h1>Projects</h1>
-<table class="listing projects">
-{% for p in projects %}<tr><td class="project-name"><a href="/{{ p.name }}">{{ p.name }}</a></td><td class="description">{{ p.description }}</td><td class="revision"><code>{{ p.tip[:12] }}</code></td><td class="updated">{{ p.updated }}</td></tr>
-{% endfor %}
-</table>
+<div class="page-heading">
+  <p class="eyebrow">Public repositories</p>
+  <h1>Projects</h1>
+  <p class="intro">Browse the code, read the docs, and take a copy.</p>
+</div>
+<section class="panel" aria-labelledby="projects-heading">
+  <div class="section-heading"><h2 id="projects-heading">All projects</h2><span class="count">{{ projects | length }} {{ 'project' if projects | length == 1 else 'projects' }}</span></div>
+  {% if projects %}
+  <table class="listing projects" aria-label="Published projects">
+    <tbody>
+    {% for p in projects %}
+    <tr>
+      <td class="project-name"><a href="/{{ p.name }}">{{ p.name }}</a><span class="project-label">Repository</span></td>
+      <td class="description">{{ p.description }}</td>
+      <td class="revision"><span class="meta-label">Latest commit</span><code>{{ p.tip[:12] }}</code></td>
+      <td class="updated">{% if p.updated %}<span class="meta-label">Updated</span><time datetime="{{ p.updated }}" title="{{ p.updated }}">{{ p.updated[:10] }}</time>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state"><h3>No projects published yet</h3><p>Published repositories will appear here.</p></div>
+  {% endif %}
+</section>
 {% endblock %}

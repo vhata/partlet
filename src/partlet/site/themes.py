@@ -16,7 +16,7 @@ from partlet.gitutil import GitError, git, git_out
 from partlet.manifest import NAME_RE, THEME_MODES, ThemeConfig
 
 BUILTIN_THEMES = {
-    "classic": "Compact, familiar repository browser",
+    "classic": "Clean repository panels and a quiet teal accent (default)",
     "paper": "Spacious serif prose and a warm reading surface",
     "terminal": "Restrained monospace layout with code emphasis",
 }
