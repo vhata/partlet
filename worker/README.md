@@ -18,39 +18,34 @@ follow the README's
 without an `approved` hash is skipped by `build`. Use a harmless test
 project while learning this flow.
 
-Install Node from [.node-version](.node-version) and npm >=11.19. Set
-these paths to your checkouts, then run:
+Install Node from [.node-version](.node-version) and npm >=11.19, then
+prepare Partlet's Worker tools once:
 
 ```bash
-PARTLET_DIR=/absolute/path/to/partlet
+partlet setup --worker
+```
+
+Create a preview configuration in your own directory. Replace
+`my-monorepo` with the source manifest's `site.source`:
+
+```bash
+PARTLET_SITE="$HOME/partlet-sites/preview"
 SOURCE_REPO=/absolute/path/to/my-monorepo
-cd "$PARTLET_DIR"
-npm ci --prefix worker --no-audit --no-fund
+partlet worker init "$PARTLET_SITE" \
+  --name partlet-preview --source my-monorepo --bucket partlet-preview
 PARTLET_PREVIEW="$(mktemp -d)"
-PARTLET_LOCAL_R2="$(mktemp -d)"
-"$PARTLET_DIR/.venv/bin/partlet" build --repo "$SOURCE_REPO" \
-  --out "$PARTLET_PREVIEW" --scan
+partlet build --repo "$SOURCE_REPO" --out "$PARTLET_PREVIEW" --scan
+partlet worker preview --config "$PARTLET_SITE/wrangler.toml" \
+  --out "$PARTLET_PREVIEW" --port 8787
 ```
 
-Expect `published` for the approved project. `build` writes a directory
-of internal storage keys, rather than a directly browsable website. Load
-it into the local Worker's bucket and start the server:
-
-```bash
-cd "$PARTLET_DIR/worker"
-export WRANGLER_SEND_METRICS=false CLOUDFLARE_CF_FETCH_ENABLED=false
-PARTLET_BUCKET=replace-me
-node tools/seed-r2.mjs "$PARTLET_PREVIEW" "$PARTLET_LOCAL_R2" "$PARTLET_BUCKET"
-node_modules/.bin/wrangler dev --local --ip 127.0.0.1 \
-  --port 8787 --inspector-port 0 --var SOURCE:my-monorepo \
-  --persist-to "$PARTLET_LOCAL_R2"
-```
-
-`PARTLET_BUCKET` must match `bucket_name` in `worker/wrangler.toml`; the
-unedited file uses `replace-me`. Replace `my-monorepo` in the `--var`
-argument with the manifest's `site.source`. The same persistence
-directory must be used by both commands. The seeder replaces the local
-bucket's entire contents, so use the fresh temporary directory above.
+Expect `published` for an approved project. `build` writes internal
+storage keys, rather than a directly browsable website. `worker preview`
+loads them into fresh simulated R2, uses the config's source and bucket,
+and starts a local Worker. It does not create a cloud bucket or deploy.
+The domain can remain a placeholder for local preview. You can also use
+an existing deployment configuration for preview; remote bindings are
+refused.
 
 Open `http://127.0.0.1:8787/`. In another terminal, clone your project
 (replace `foo` if needed):
@@ -60,12 +55,14 @@ git clone http://127.0.0.1:8787/foo partlet-preview-clone
 ```
 
 The page's displayed clone URL uses the manifest's `base_url`; use the
-localhost URL above for local cloning. Stop Wrangler with Ctrl-C. To
-preview an update, commit it on your source publishing branch, rerun
-`build`, reseed the same local store with the server stopped, then
-restart Wrangler. Keep the shell variables if you want to reuse these
-commands. See [publisher commands](../docs/PUBLISHING.md#commands) for
-build options.
+localhost URL above for local cloning. Stop with Ctrl-C. To preview an
+update, commit it on your source publishing branch, rerun `build`, then
+restart `worker preview` with the rebuilt output. Each preview uses
+fresh disposable local state, so removed objects do not linger. See
+[publisher commands](../docs/PUBLISHING.md#commands) for build options.
+
+No Partlet checkout is needed for this flow. Configuration directories
+survive tool upgrades; see [installation](../docs/INSTALLATION.md).
 
 ## User-run deployment
 
