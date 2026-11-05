@@ -22,6 +22,7 @@ import {
   rawType,
   SNIFF_BYTES,
   TEXT,
+  THEME_TYPES,
 } from "./policy";
 import { NAME_RE, parseRoute, type Route } from "./route";
 
@@ -243,6 +244,13 @@ async function handle(request: Request, env: Env, route: Route): Promise<Respons
             `${source}/index.json`,
             baseHeaders(JSON_TYPE, FILE_CSP, CACHE_REVALIDATE),
           );
+    case "theme":
+      return serveObject(
+        request,
+        env,
+        `${source}/static/themes/${route.digest}/${route.path}`,
+        baseHeaders(THEME_TYPES[route.format], FILE_CSP, CACHE_IMMUTABLE),
+      );
     case "git": {
       const key = `${source}/p/${route.project}/git/${route.path}`;
       if (route.path === "info/refs") {

@@ -1,7 +1,7 @@
 // Response headers: content types, caching and the security headers every
 // response carries. Pure: no I/O.
 
-// Packs are content-addressed and never rewritten.
+// Packs and fingerprinted theme resources are never rewritten.
 export const CACHE_IMMUTABLE = "public, max-age=31536000, immutable";
 // Site URLs, including pages, raw files and archives whose stored key is
 // resolved through `current`. Mutable Git metadata instead uses CACHE_NONE.
@@ -35,6 +35,15 @@ const IMAGE_TYPES: Record<string, string> = {
   gif: "image/gif",
   webp: "image/webp",
 };
+
+export const THEME_TYPES = {
+  css: CSS,
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+} as const;
 
 // Markup a browser would render as an active document if it ignored the
 // content type: always a download, even though it is text.

@@ -6,8 +6,12 @@
 // fixed list. Anything else is null, which the Worker answers with a 404
 // without reading the bucket.
 
+import { THEME_TYPES } from "./policy";
+
 export const NAME_RE = /^[a-z0-9][a-z0-9._-]*(?![\s\S])/;
 const PACK_RE = /^pack-(?:[0-9a-f]{40}|[0-9a-f]{64})\.(?:pack|idx)(?![\s\S])/;
+const THEME_DIGEST_RE = /^[0-9a-f]{64}(?![\s\S])/;
+const THEME_SEGMENT_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(?![\s\S])/;
 
 // Keys under a project's live site build, as the publisher writes them
 // (src/partlet/site/render.py). The Worker builds them here and nowhere else,
@@ -25,6 +29,7 @@ export type ArchiveFormat = (typeof ARCHIVE_FORMATS)[number];
 export type Route =
   | { kind: "index" }
   | { kind: "asset"; asset: "style.css" | "index.json" }
+  | { kind: "theme"; digest: string; path: string; format: keyof typeof THEME_TYPES }
   // `key` is relative to the live site build (SITE_KEYS); `path` is the
   // file's path in the project.
   | { kind: "page"; project: string; key: string }
@@ -78,6 +83,32 @@ function gitRoute(project: string, rest: string[]): Route | null {
   return null;
 }
 
+function themeRoute(segments: string[]): Route | null {
+  const [digest, ...path] = segments;
+  if (digest === undefined || !THEME_DIGEST_RE.test(digest)) return null;
+  if (path.length === 1 && path[0] === "style.css") {
+    return { kind: "theme", digest, path: "style.css", format: "css" };
+  }
+  if (
+    path.length < 2 ||
+    path[0] !== "assets" ||
+    !path.slice(1).every((segment) => THEME_SEGMENT_RE.test(segment))
+  ) {
+    return null;
+  }
+  const name = path.at(-1) ?? "";
+  const dot = name.lastIndexOf(".");
+  if (dot < 1) return null;
+  const format = name.slice(dot + 1);
+  if (format === "css" || !Object.hasOwn(THEME_TYPES, format)) return null;
+  return {
+    kind: "theme",
+    digest,
+    path: path.join("/"),
+    format: format as keyof typeof THEME_TYPES,
+  };
+}
+
 export function parseRoute(pathname: string): Route | null {
   if (!pathname.startsWith("/")) return null;
   if (pathname === "/") return { kind: "index" };
@@ -86,6 +117,7 @@ export function parseRoute(pathname: string): Route | null {
 
   const [first, ...rest] = segments;
   if (first === "_partlet") {
+    if (rest[0] === "themes") return themeRoute(rest.slice(1));
     if (rest.length === 1 && (rest[0] === "style.css" || rest[0] === "index.json")) {
       return { kind: "asset", asset: rest[0] };
     }
