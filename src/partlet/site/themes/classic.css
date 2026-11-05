@@ -1,1 +1,33 @@
-/* Classic preserves Partlet's compact system-font presentation. */
+/* Classic: a quiet, spacious repository browser, ready without configuration. */
+:root {
+  --fg: #202b3c;
+  --muted: #5c687a;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --line: #dce2e9;
+  --link: #086b73;
+  --code-bg: #f2f5f8;
+  --focus: #086b73;
+}
+:root[data-mode="dark"] {
+  --fg: #e5ebf3;
+  --muted: #a6b2c3;
+  --bg: #0e131c;
+  --surface: #171f2b;
+  --line: #2b3545;
+  --link: #82d4d8;
+  --code-bg: #101721;
+  --focus: #82d4d8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-mode="auto"] {
+    --fg: #e5ebf3;
+    --muted: #a6b2c3;
+    --bg: #0e131c;
+    --surface: #171f2b;
+    --line: #2b3545;
+    --link: #82d4d8;
+    --code-bg: #101721;
+    --focus: #82d4d8;
+  }
+}

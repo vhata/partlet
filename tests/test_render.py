@@ -1,4 +1,4 @@
-from partlet.manifest import ThemeConfig
+from partlet.manifest import ThemeConfig, parse_manifest
 from partlet.site.render import (
     ProjectInfo,
     render_project,
@@ -212,7 +212,10 @@ def test_theme_applies_to_every_rendered_page_and_site_index():
     )
     # Index timestamps need a wrapping hook, not the nowrap file-size hook.
     assert b'class="listing projects"' in index
-    assert f'class="updated">{INFO.updated}'.encode() in index
+    assert (
+        f'<time datetime="{INFO.updated}" title="{INFO.updated}">2026-01-01</time>'.encode()
+        in index
+    )
     assert b'class="size"' not in index
     for data in [
         index,
@@ -228,3 +231,61 @@ def test_theme_applies_to_every_rendered_page_and_site_index():
 def test_legacy_renderer_keeps_legacy_stylesheet():
     assert b'href="/_partlet/style.css"' in render_site_index(INFO.base_url, [])
     assert b"data-mode=" not in render_site_index(INFO.base_url, [])
+
+
+def test_manifest_without_theme_gets_default_layout_and_color_preference():
+    manifest = parse_manifest("""[site]
+source = "s"
+base_url = "https://partlet.example"
+[projects.foo]
+path = "foo"
+""")
+    theme = resolve_theme(manifest.site.theme)
+    assert (theme.name, theme.mode) == ("classic", "auto")
+    page = render_project(INFO, [FileEntry("README.md", b"# Hello\n")], theme)[
+        "index.html"
+    ]
+    assert b'data-theme="classic" data-mode="auto"' in page
+    assert theme.stylesheet_url.encode() in page
+    assert b'aria-labelledby="clone-heading"' in page
+    assert b'aria-label="Files and directories"' in page
+    assert b'aria-label="README"' in page
+
+
+def test_page_landmarks_and_skip_link_work_on_index_tree_and_file():
+    pages = render_project(INFO, [FileEntry("src/main.py", b"print(1)\n")])
+    for page in (
+        render_site_index(INFO.base_url, []),
+        pages["index.html"],
+        pages["tree/src/index.html"],
+        pages["blob/src/main.py"],
+    ):
+        assert b'href="#content">Skip to content</a>' in page
+        assert b'<main id="content" tabindex="-1">' in page
+        assert b'<header class="top">' in page
+        assert b'<footer class="site-footer">' in page
+    assert b"<h1>foo</h1>" in pages["index.html"]
+    assert b"<h1>src</h1>" in pages["tree/src/index.html"]
+    assert b"<h1>main.py</h1>" in pages["blob/src/main.py"]
+    assert b'aria-label="Breadcrumb"' in pages["blob/src/main.py"]
+    assert b'<span aria-current="page">main.py</span>' in pages["blob/src/main.py"]
+
+
+def test_empty_index_and_repository_explain_absent_content():
+    index = render_site_index(INFO.base_url, [])
+    assert b"No projects published yet" in index
+    assert b"0 projects" in index
+    assert b'<table class="listing projects"' not in index
+    project = render_project(INFO, [])["index.html"]
+    assert b"This repository has no files at this revision." in project
+    assert b"0 entries" in project
+    assert b'<table class="listing"' not in project
+
+
+def test_missing_dates_do_not_render_empty_time_elements():
+    index = render_site_index(
+        INFO.base_url,
+        [{"name": "foo", "description": "", "tip": INFO.tip, "updated": ""}],
+    )
+    assert b"1 project</span>" in index
+    assert b"<time" not in index
