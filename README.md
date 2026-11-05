@@ -111,7 +111,29 @@ committed history, including merged history, rather than uncommitted
 files. If the directory moved in the past, declare its old locations
 using [`previous_paths`](docs/PUBLISHING.md#manifest-reference).
 
-### 3. Review and approve the first export
+### 3. Preview locally
+
+Install the Worker tools once (requires Node/npm), then browse your
+site:
+
+```bash
+partlet setup --worker
+partlet preview --repo "$SOURCE_REPO"
+```
+
+Open `http://127.0.0.1:8787/`. No Cloudflare account, deployment config,
+or publication approval is needed. Preview includes every configured
+project and the selected theme, using committed history from
+`site.branch` and your current manifest. Uncommitted source and vendored
+theme edits are not included. Clone URLs point to the local server.
+
+Stop with Ctrl-C; temporary output is removed and approvals stay
+unchanged. Rerun the command after changing the manifest or committing
+source changes. Add `--port 8788` to use another port, or `--scan` to
+check exported history for secrets before serving. See the
+[Worker guide](worker/README.md#preview-your-site) for details.
+
+### 4. Review and approve the first export
 
 From the same terminal:
 
@@ -129,7 +151,7 @@ Repeat for any other projects you want to publish.
 Use `--first-publish` only for a project's first publication. For an
 existing project, omit it so review checks the public site's history.
 
-### 4. Connect Cloudflare and enable publishing
+### 5. Connect Cloudflare and enable publishing
 
 Follow [Publish your first site](docs/GETTING_STARTED.md). It walks
 through creating the bucket, configuring and deploying the Worker,
@@ -143,6 +165,7 @@ any command for its options and examples:
 
 ```bash
 partlet review --help
+partlet preview --help
 partlet worker
 partlet worker preview --help
 ```

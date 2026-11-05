@@ -100,6 +100,7 @@ installed external tools or cloud credentials.
 | Command | Effect |
 | -- | -- |
 | `partlet review foo --repo /path/to/source` | Inspect exported history and, after confirmation, write approval into the local manifest. |
+| `partlet preview --repo /path/to/source` | Build all configured projects and browse them locally without approval, cloud access or deployment config. |
 | `partlet build --repo /path/to/source --out /path/to/output --scan` | Scan and build approved projects into a local directory, without R2 access. |
 | `partlet publish --repo /path/to/source` | Scan and publish approved projects to R2 using the credentials below. |
 | `partlet unpublish foo --repo /path/to/source` | Confirm and delete the project's stored data, then rebuild the site index. |
@@ -107,12 +108,22 @@ installed external tools or cloud credentials.
 | `partlet theme list` | List the bundled site themes without cloud access. |
 | `partlet theme check --repo /path/to/source` | Validate the selected theme using committed publishing-branch inputs. |
 
-`review` and `build` export the local `site.branch`, including its
-committed history; uncommitted project edits are not exported. Update
-that branch before reviewing. `publish` additionally requires HEAD to
-equal its local publishing branch tip and the manifest to match its
-committed contents. A shallow source checkout is refused. These local
-checks do not fetch or verify a remote branch tip.
+`review`, `preview` and `build` export the local `site.branch`,
+including its committed history; uncommitted project edits are not
+exported. Update that branch before reviewing. `publish` additionally
+requires HEAD to equal its local publishing branch tip and the manifest
+to match its committed contents. A shallow source checkout is refused.
+These local checks do not fetch or verify a remote branch tip.
+
+`preview` uses fresh temporary output and local simulated R2, with clone
+URLs pointing at localhost. It reads the current manifest without
+modifying approvals, including projects with missing or stale approvals.
+It needs the Worker tools (`partlet setup --worker`) but no hosting
+configuration. Stop with Ctrl-C and rerun to pick up changes; there is
+no automatic rebuild. `--port` defaults to 8787. Add `--scan` to check
+history before serving; preview skips scanning by default and does not
+replace publication review. Its temporary output is removed on normal
+shutdown, including Ctrl-C and SIGTERM.
 
 `build` without `--scan` skips secret scanning. Its output contains
 internal storage keys, not an ordinary website root. Use the

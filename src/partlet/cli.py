@@ -101,13 +101,14 @@ def _parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "Start in your source repository, with projects in partlet.toml:\n"
+            "  partlet preview                         # browse locally before approval\n"
             "  partlet review foo --first-publish       # inspect and approve history\n"
             "  partlet build --scan --out ./preview     # build approved projects locally\n"
             "\n"
             "After hosting setup, commit the approval and push to publish through\n"
             "your GitHub Action. Later fast-forward changes publish automatically.\n"
             "\n"
-            "Run 'partlet worker' for local preview and hosting commands.\n"
+            "Run 'partlet worker' for hosting and existing-build preview commands.\n"
             "Use 'partlet COMMAND --help' for options and examples.\n"
             "Hosting setup: https://github.com/vhata/partlet/blob/main/docs/GETTING_STARTED.md"
         ),
@@ -169,6 +170,35 @@ def _parser() -> argparse.ArgumentParser:
         help="scan each export with gitleaks before writing it, as publish does",
     )
     _summary_arg(build)
+
+    preview = _command(
+        sub,
+        "preview",
+        "build and browse the site locally without publishing",
+        "Build all configured projects, including unapproved projects, and serve "
+        "them at localhost using the real Worker and simulated R2. No hosting "
+        "configuration or cloud account is needed. Requires 'partlet setup "
+        "--worker' once. Reads committed history from site.branch, plus the "
+        "current manifest; uncommitted source and vendored theme edits are not "
+        "included. Stop with Ctrl-C; temporary output is removed. Approvals "
+        "and the source checkout are not changed.",
+        "  partlet preview\n"
+        "  partlet preview --repo /path/to/source --port 8788\n"
+        "  partlet preview --scan",
+    )
+    _repo_args(preview)
+    preview.add_argument(
+        "--port",
+        type=int,
+        metavar="PORT",
+        default=8787,
+        help="localhost port (default: 8787)",
+    )
+    preview.add_argument(
+        "--scan",
+        action="store_true",
+        help="scan exported history for secrets before serving (off by default)",
+    )
 
     publish = _command(
         sub,
@@ -491,6 +521,74 @@ def _build(args: argparse.Namespace) -> int:
     )
 
 
+def _preview(args: argparse.Namespace) -> int:
+    from partlet import runtime, worker
+    from partlet.preview import build_preview
+    from partlet.site.tree import TreeError
+
+    _forget_r2_keys()
+    try:
+        if not 1 <= args.port <= 65535:
+            raise worker.WorkerError("preview port must be between 1 and 65535")
+        repo = args.repo.resolve()
+        manifest_path = _manifest_path(args)
+        manifest = load_manifest(manifest_path)
+        if not manifest.projects:
+            raise ManifestError(
+                "no projects configured; add [projects.NAME] to the manifest"
+            )
+        runtime.worker_root()  # Fail before exporting if setup has not been run.
+        tools = check_tools(gitleaks=args.scan)
+        theme = resolve_theme(
+            manifest.site.theme,
+            repo,
+            branch=manifest.site.branch,
+            manifest_path=manifest_path,
+        )
+        scanner = Scanner(tools.gitleaks, repo) if tools.gitleaks else None
+        print(
+            f"Building local preview from {manifest.site.branch!r}. "
+            "Includes unapproved projects; publication approvals are unchanged.",
+            flush=True,
+        )
+        with tempfile.TemporaryDirectory(prefix="partlet-preview-") as temporary:
+            directory = Path(temporary)
+            out = build_preview(repo, manifest, directory, args.port, theme, scanner)
+            config = worker.init_config(
+                directory / "site",
+                name="partlet-preview",
+                source=manifest.site.source,
+                bucket="partlet-preview",
+                workers_dev=True,
+                announce=False,
+            )
+            return worker.run_worker(
+                argparse.Namespace(
+                    worker_command="preview", config=config, out=out, port=args.port
+                ),
+                confirm=_confirm,
+            )
+    except KeyboardInterrupt:
+        print("Local preview stopped.", file=sys.stderr)
+        return 130
+    except (
+        ManifestError,
+        ThemeError,
+        ToolError,
+        ExportError,
+        GitError,
+        ScanError,
+        TreeError,
+        StoreError,
+        LocalPathError,
+        runtime.SetupError,
+        worker.WorkerError,
+        OSError,
+        UnicodeError,
+    ) as exc:
+        return _error(exc)
+
+
 def _publish(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     manifest_path = _manifest_path(args)
@@ -715,6 +813,7 @@ def _theme(args: argparse.Namespace) -> int:
 
 
 COMMANDS = {
+    "preview": _preview,
     "setup": _setup,
     "worker": _worker,
     "theme": _theme,

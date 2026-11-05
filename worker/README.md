@@ -10,59 +10,83 @@ it needs no credentials for the private source repository.
 creation, credentials, domain configuration, and deployment. This page
 covers local previews, Worker behavior, and development.
 
-## Preview local publisher output
+## Preview your site
 
-A local preview uses simulated R2 and needs no Cloudflare account. First
-follow the README's
-[installation and approval steps](../README.md#get-started). A project
-without an `approved` hash is skipped by `build`. Use a harmless test
-project while learning this flow.
-
-Install Node from [.node-version](.node-version) and npm >=11.19, then
-prepare Partlet's Worker tools once:
+A local preview needs no Cloudflare account or deployment configuration.
+Install Partlet and create `partlet.toml` in your source repository as
+shown in the [README](../README.md#get-started). Install Node from
+[.node-version](.node-version) and npm >=11.19, then prepare the Worker
+tools once:
 
 ```bash
 partlet setup --worker
 ```
 
-Create a preview configuration in your own directory. Replace
-`my-monorepo` with the source manifest's `site.source`:
+From your source repository, run:
 
 ```bash
-PARTLET_SITE="$HOME/partlet-sites/preview"
-SOURCE_REPO=/absolute/path/to/my-monorepo
-partlet worker init "$PARTLET_SITE" \
-  --name partlet-preview --source my-monorepo --bucket partlet-preview
-PARTLET_PREVIEW="$(mktemp -d)"
-partlet build --repo "$SOURCE_REPO" --out "$PARTLET_PREVIEW" --scan
-partlet worker preview --config "$PARTLET_SITE/wrangler.toml" \
-  --out "$PARTLET_PREVIEW" --port 8787
+partlet preview
 ```
 
-Expect `published` for an approved project. `build` writes internal
-storage keys, rather than a directly browsable website. `worker preview`
-loads them into fresh simulated R2, uses the config's source and bucket,
-and starts a local Worker. It does not create a cloud bucket or deploy.
-The domain can remain a placeholder for local preview. You can also use
-an existing deployment configuration for preview; remote bindings are
-refused.
+Or select a checkout explicitly:
 
-Open `http://127.0.0.1:8787/`. In another terminal, clone your project
-(replace `foo` if needed):
+```bash
+partlet preview --repo /absolute/path/to/my-monorepo
+```
+
+Open `http://127.0.0.1:8787/`. Browse project files, README pages,
+archives and the selected theme, or clone through the local Worker:
 
 ```bash
 git clone http://127.0.0.1:8787/foo partlet-preview-clone
 ```
 
-The page's displayed clone URL uses the manifest's `base_url`; use the
-localhost URL above for local cloning. Stop with Ctrl-C. To preview an
-update, commit it on your source publishing branch, rerun `build`, then
-restart `worker preview` with the rebuilt output. Each preview uses
-fresh disposable local state, so removed objects do not linger. See
-[publisher commands](../docs/PUBLISHING.md#commands) for build options.
+Replace `foo` with your configured project name. The page's clone
+command also uses localhost. Use `--port 8788` for another port and
+`--manifest /path/to/alternate.toml` for another manifest.
 
-No Partlet checkout is needed for this flow. Configuration directories
-survive tool upgrades; see [installation](../docs/INSTALLATION.md).
+Preview includes all configured projects, even those without publication
+approval or with an outdated approval. It never changes the manifest or
+approves publication. It exports committed history from `site.branch`,
+using the current manifest and committed vendored theme files;
+uncommitted source or vendored CSS changes are not included. There is no
+automatic rebuild: commit source/theme changes to that branch, then stop
+with Ctrl-C and rerun. Manifest-only changes can be previewed without a
+commit. Add `--scan` to scan history before serving; scanning is off by
+default for this local browsing command. Publication still requires its
+own review and mandatory secret scan.
+
+The command builds into a fresh temporary object store, seeds simulated
+R2 and runs the actual Worker bound to `127.0.0.1`. It creates no cloud
+resources, needs no cloud credentials, and removes temporary output on
+exit, including Ctrl-C and SIGTERM. Worker tools must already be
+installed; preview never downloads them automatically. No Partlet
+checkout or deployment directory is needed.
+
+## Preview local publisher output
+
+To inspect an existing `partlet build` output with your deployment
+configuration, the lower-level command remains available:
+
+```bash
+SOURCE_REPO=/absolute/path/to/my-monorepo
+PARTLET_PREVIEW="$(mktemp -d)"
+partlet build --repo "$SOURCE_REPO" --out "$PARTLET_PREVIEW" --scan
+partlet worker preview --config /path/to/site/wrangler.toml \
+  --out "$PARTLET_PREVIEW" --port 8787
+```
+
+Unlike `partlet preview`, `build` includes only approved projects. It
+writes internal storage keys, rather than a directly browsable website.
+The deployment configuration's `SOURCE` must match the manifest's
+`site.source`; remote bindings are refused. The page's displayed clone
+URL uses the manifest's `base_url`, so use the localhost URL for local
+cloning. To preview an update, rerun `build` and restart
+`worker preview`. Each server uses fresh disposable simulated R2, while
+the build output remains in the directory you chose. See
+[publisher commands](../docs/PUBLISHING.md#commands) for build options
+and [installation](../docs/INSTALLATION.md) for deployment
+configuration.
 
 ## User-run deployment
 

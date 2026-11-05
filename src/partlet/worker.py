@@ -162,6 +162,7 @@ def init_config(
     domain: str | None = None,
     workers_dev: bool = False,
     account_id: str | None = None,
+    announce: bool = True,
 ) -> Path:
     """Create an editable config without pinning paths to this installation."""
     if workers_dev and domain is not None:
@@ -211,7 +212,8 @@ def init_config(
         if workers_dev
         else "SOURCE, bucket_name and your domain"
     )
-    print(f"Created {path}. Set {choices} before deploying.")
+    if announce:
+        print(f"Created {path}. Set {choices} before deploying.")
     return path
 
 

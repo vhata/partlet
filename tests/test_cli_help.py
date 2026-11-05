@@ -41,6 +41,7 @@ def test_no_process_arguments_shows_help(monkeypatch, no_dispatch, capsys):
         [],
         ["review"],
         ["build"],
+        ["preview"],
         ["publish"],
         ["worker"],
         ["worker", "init"],

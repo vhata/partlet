@@ -6,6 +6,12 @@ Choices made autonomously under a delegation are recorded here for the
 user to review; an entry is a record, not a claim that the capability is
 complete.
 
+## 2026-11-05
+
+| Decision | Reason and trade-off |
+| -- | -- |
+| Build `partlet preview` into fresh temporary local storage using the shared export, renderer, archive and Git transport primitives, then serve it with the installed Worker. Include every configured project without consulting or writing approval pins. | Browsing before publication must not require approving public release or setting up hosting. A separate disposable builder avoids adding an approval bypass to the publisher. The in-memory site URL points to localhost so clone instructions work. Cost: preview assembles its own minimal object-store records, exports full history on each invocation and requires an explicit restart to rebuild. |
+
 ## 2026-11-04
 
 | Decision | Reason and trade-off |
