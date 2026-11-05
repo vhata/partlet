@@ -60,9 +60,17 @@ partlet worker login
 partlet worker whoami
 ```
 
-In the Cloudflare dashboard, open **R2 → Create bucket** and create
-`my-partlet-public`, or use an existing dedicated bucket. Partlet does
-not provision buckets automatically.
+`whoami` prints your account names and IDs. Copy the ID of the account
+you want to use into a shell variable:
+
+```bash
+PARTLET_ACCOUNT_ID=REPLACE_WITH_YOUR_32_CHARACTER_ACCOUNT_ID
+```
+
+Use this account explicitly when creating your configuration below. If
+R2 is not enabled yet, activate it in the Cloudflare dashboard and
+accept its billing terms first. The remaining bucket and Worker setup
+can run from your terminal.
 
 Keep direct public bucket access disabled; visitors access it through
 the Worker. Partlet manages and cleans up objects under its source
@@ -74,32 +82,35 @@ one of the address options below. Both produce your own
 code, so you do not add a `main` path.
 
 Use a Worker name that will not replace an unrelated Worker. If you have
-several Cloudflare accounts, pass `--account-id YOUR_ACCOUNT_ID` to
-`init`, or set the top-level `account_id` in the generated file. Keep
-the compatibility date. `SOURCE` must match the manifest's
-`site.source`, and `bucket_name` must name your existing bucket.
+several Cloudflare accounts, select the intended ID above. The
+`--account-id` option records it in the generated file. Keep the
+compatibility date. `SOURCE` must match the manifest's `site.source`,
+and `bucket_name` must name the bucket you will use.
 
 ### Option A: Use Cloudflare's default `workers.dev` address
 
-In the Cloudflare dashboard, open **Workers & Pages** and find **Your
-subdomain**. Choose or change it there if needed. With Worker name
-`partlet-personal` and account subdomain `my-account`, your site's
-address is `https://partlet-personal.my-account.workers.dev`. The
+You do not need to look up an account subdomain before creating the
+configuration. Deployment uses your account's existing subdomain, or
+Wrangler prompts you to register one if the account has none. With
+Worker name `partlet-personal` and account subdomain `my-account`, your
+site's address is `https://partlet-personal.my-account.workers.dev`. The
 account subdomain is separate from your account ID and Partlet's
 `SOURCE`.
 
 ```bash
 partlet worker init "$PARTLET_SITE" \
   --name partlet-personal --source my-monorepo \
-  --bucket my-partlet-public --workers-dev
+  --bucket my-partlet-public --workers-dev \
+  --account-id "$PARTLET_ACCOUNT_ID"
 ```
 
 This sets top-level `workers_dev = true` and omits the `[[routes]]`
 block. Cloudflare derives the address from the Worker name and account
 subdomain; you do not put a `workers.dev` hostname in `pattern`. See
 Cloudflare's
-[`workers.dev` guide](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
-for account subdomain settings.
+[CLI deployment guide](https://developers.cloudflare.com/workers/get-started/guide/#4-deploy-your-project)
+for first-time registration. Changing an existing account subdomain
+affects other Workers too; it is not part of Partlet setup.
 
 ### Option B: Use a hostname on your own domain
 
@@ -112,7 +123,8 @@ already serving another site or one with an existing CNAME record.
 ```bash
 partlet worker init "$PARTLET_SITE" \
   --name partlet-personal --source my-monorepo \
-  --bucket my-partlet-public --domain code.example.com
+  --bucket my-partlet-public --domain code.example.com \
+  --account-id "$PARTLET_ACCOUNT_ID"
 ```
 
 The generated configuration includes:
@@ -143,6 +155,22 @@ Cloudflare's
 [Custom Domains guide](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
 explains hostname requirements and DNS/certificate setup.
 
+### Create the bucket
+
+After choosing either address option, create the configured R2 bucket:
+
+```bash
+partlet worker bucket-create --config "$PARTLET_SITE/wrangler.toml"
+```
+
+The command shows the account ID and bucket name, explains that R2 is
+billable, and asks for confirmation before creating it. It uses
+[Wrangler's bucket creation command](https://developers.cloudflare.com/r2/buckets/create-buckets/)
+with your existing Cloudflare login; no publisher keys are needed yet.
+The new bucket is private by default. Skip this command if you already
+have a dedicated bucket with that name in the selected account.
+Deployment itself does not automatically provision missing buckets.
+
 ### Deploy and record your site's URL
 
 Review `$PARTLET_SITE/wrangler.toml`. This directory belongs to you and
@@ -163,10 +191,9 @@ confirmation. A dry run bundles locally and does not deploy. Installed
 tool upgrades preserve this config; upgrading the hosted Worker requires
 an explicit deployment. See [upgrades](INSTALLATION.md#upgrades).
 
-Wrangler prints the deployed URL. You can also find it by opening your
-Worker in Cloudflare under **Settings → Domains & Routes**. Confirm that
-address and its R2 binding. In your source repository's `partlet.toml`,
-set `site.base_url` to that full HTTPS URL, for example
+Wrangler prints the deployed URL and R2 binding in the terminal. Check
+that they match your choices. In your source repository's
+`partlet.toml`, set `site.base_url` to that full HTTPS URL, for example
 `https://partlet-personal.my-account.workers.dev` for Option A or
 `https://code.example.com` for Option B. This is the URL Partlet puts in
 pages and clone links. Use it wherever the rest of this guide shows
@@ -183,8 +210,15 @@ In Cloudflare R2, create an API credential with **Object Read & Write**
 access scoped to this bucket only. Save its Access Key ID and Secret
 Access Key when shown; these are the R2 S3 credentials described in
 Cloudflare's
-[R2 token guide](https://developers.cloudflare.com/r2/api/tokens/). Also
-copy the Cloudflare account ID from the dashboard.
+[R2 token guide](https://developers.cloudflare.com/r2/api/tokens/). Use
+the account ID you recorded from `partlet worker whoami` in step 2.
+
+This credential step still uses the dashboard. Cloudflare supports
+[creating tokens through its API](https://developers.cloudflare.com/fundamentals/api/how-to/create-via-api/),
+but requires a separate initial token with permission to create other
+tokens. The normal Wrangler login does not provide that authority.
+Creating one bucket-scoped credential directly avoids granting that
+broader permission for a single site.
 
 In your **source repository** on GitHub, open **Settings → Secrets and
 variables → Actions**, then add these repository secrets:

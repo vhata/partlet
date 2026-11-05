@@ -93,6 +93,19 @@ configuration. You can omit options and edit the generated placeholders;
 deployment refuses placeholders. Set `account_id` or pass `--account-id`
 when you need to select a specific Cloudflare account.
 
+To create a new bucket, set `account_id` explicitly (or pass
+`--account-id` to `init`), then run:
+
+```bash
+partlet worker bucket-create --config "$HOME/partlet-sites/personal/wrangler.toml"
+```
+
+Bucket creation is a separate billable action and asks for confirmation.
+It uses the bucket and account in that file and leaves direct public
+access disabled for a newly created bucket. Skip creation for an
+existing bucket. Deployment does not create buckets automatically. See
+[first-site setup](GETTING_STARTED.md) for the full sequence.
+
 Each source name must match its source repository's `site.source`. Each
 public address must match that repository's `base_url`. Choose distinct
 Worker names and addresses for independent deployments. Keep bucket and

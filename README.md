@@ -132,9 +132,9 @@ existing project, omit it so review checks the public site's history.
 ### 4. Connect Cloudflare and enable publishing
 
 Follow [Publish your first site](docs/GETTING_STARTED.md). It walks
-through creating the bucket, configuring and deploying the Worker,
-adding GitHub secrets and the publishing workflow, committing the
-approval, and verifying your first public clone.
+through creating the bucket from the CLI, configuring and deploying the
+Worker, adding GitHub secrets and the publishing workflow, committing
+the approval, and verifying your first public clone.
 
 ## Everyday use
 
