@@ -1,28 +1,33 @@
 # Copy to .github/workflows/partlet.yml in the source repository.
 # Setup walkthrough: docs/GETTING_STARTED.md in the Partlet checkout.
-# Replace SOURCE with site.source from partlet.toml.
-# Replace PARTLET_RELEASE_SHA with the full commit hash of your Partlet checkout
-# (git rev-parse HEAD there). You do not need to create a release tag.
+# Make the three substitutions marked EDIT below.
 # Create the four PARTLET_R2_* secrets in the source repository before enabling.
 name: Partlet
 on:
   push:
-    branches: [main] # Must match site.branch in partlet.toml.
+    branches: [main] # EDIT if site.branch in partlet.toml differs.
   workflow_dispatch:
 permissions:
+  # Workflow's GitHub token permissions; R2 access uses separate secrets below.
   contents: read
 concurrency:
+  # EDIT SOURCE to site.source from partlet.toml (e.g. my-monorepo).
   group: partlet-SOURCE # Use the same group in all workflows for this source.
+  # Let an active publication finish instead of interrupting it on a new push.
   cancel-in-progress: false
 jobs:
   publish:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      # Step 1: download the source repository. This with: configures checkout.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          persist-credentials: false
+          fetch-depth: 0 # Keep: Partlet needs the full Git history.
+          persist-credentials: false # Keep: do not retain checkout's GitHub token.
+      # Step 2: publish that checkout. This with: configures Partlet's R2 access.
+      # EDIT PARTLET_RELEASE_SHA to the full commit hash of your Partlet checkout
+      # (git rev-parse HEAD there). This selects Partlet's code, not approved.
       - uses: vhata/partlet@PARTLET_RELEASE_SHA
         with:
           account-id: ${{ secrets.PARTLET_R2_ACCOUNT_ID }}

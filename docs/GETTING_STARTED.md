@@ -222,21 +222,42 @@ cp "$PARTLET_DIR/examples/partlet.yml" \
   "$SOURCE_REPO/.github/workflows/partlet.yml"
 ```
 
-Edit that copy:
+The file describes a GitHub Actions workflow with two steps, run in
+order:
 
-- Replace `PARTLET_RELEASE_SHA` in `uses: vhata/partlet@...` with the
-  full Partlet commit hash recorded in step 1. It is the Partlet code
-  version, separate from your project's generated `approved` hash.
-- Replace `SOURCE` in `group: partlet-SOURCE` with `my-monorepo`.
-- If your publishing branch differs, replace `main` in `branches` with
-  the manifest's `site.branch`.
+1. `uses: actions/checkout@...` downloads your **source repository**
+   onto the runner, including its Git history and `partlet.toml`.
+1. `uses: vhata/partlet@...` publishes the approved projects from that
+   checkout to R2. It installs Partlet's tools on the Linux runner, so
+   you do not need a separate installation step.
 
-Keep the full-history checkout (`fetch-depth: 0`), read-only workflow
-permissions, `persist-credentials: false`, and
-`cancel-in-progress: false`. Use this same concurrency group in any
-other workflows publishing the same source. Publish on branch pushes,
-rather than pull requests. The Action installs its own tools on the
-Linux runner; you do not need an installation step in this workflow.
+Each step's indented `with:` block supplies inputs to that step's
+action. **`fetch-depth` and `persist-credentials` belong under
+`actions/checkout`, where the example already puts them.** The
+`vhata/partlet` step's separate `with:` block supplies the R2
+credentials and bucket from your GitHub secrets.
+
+Make these three substitutions in the copy. The example marks them with
+`EDIT` comments:
+
+| Location in the workflow | What to edit |
+| -- | -- |
+| `on` → `push` → `branches` near the top | Replace `main` if your manifest's `site.branch` differs. |
+| Top-level `concurrency` → `group` | Replace `SOURCE` in `partlet-SOURCE` with your manifest's `site.source`, for example `partlet-my-monorepo`. |
+| Second step, `uses: vhata/partlet@PARTLET_RELEASE_SHA` | Replace `PARTLET_RELEASE_SHA` with the full Partlet commit hash recorded in step 1. This selects Partlet's code version; it is separate from your project's generated `approved` hash. |
+
+The remaining settings are already configured. Keep them in these
+locations:
+
+| Location in the workflow | Setting | Purpose |
+| -- | -- | -- |
+| First step, `actions/checkout` → `with` | `fetch-depth: 0` | Downloads the full Git history Partlet needs to export projects. |
+| First step, `actions/checkout` → `with` | `persist-credentials: false` | Keeps checkout's GitHub token out of the Git credentials available to later steps. |
+| Top-level `permissions` | `contents: read` | Gives the workflow's GitHub token read-only access to repository contents. R2 access comes from the separate publishing credentials. |
+| Top-level `concurrency` | `cancel-in-progress: false` | Lets an active publication finish when another run is queued. |
+
+Use this same concurrency group in any other workflows publishing the
+same source. Publish on branch pushes, rather than pull requests.
 
 For a jurisdiction-specific bucket, set the Action's optional `endpoint`
 input to its matching S3 endpoint. Further options are in the
