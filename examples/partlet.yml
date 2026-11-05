@@ -1,5 +1,5 @@
 # Copy to .github/workflows/partlet.yml in the source repository.
-# Setup walkthrough: docs/GETTING_STARTED.md in the Partlet checkout.
+# Setup walkthrough: docs/GETTING_STARTED.md in the Partlet repository.
 # Make the three substitutions marked EDIT below.
 # Create the four PARTLET_R2_* secrets in the source repository before enabling.
 name: Partlet
@@ -26,8 +26,8 @@ jobs:
           fetch-depth: 0 # Keep: Partlet needs the full Git history.
           persist-credentials: false # Keep: do not retain checkout's GitHub token.
       # Step 2: publish that checkout. This with: configures Partlet's R2 access.
-      # EDIT PARTLET_RELEASE_SHA to the full commit hash of your Partlet checkout
-      # (git rev-parse HEAD there). This selects Partlet's code, not approved.
+      # EDIT PARTLET_RELEASE_SHA to the reviewed commit used to install Partlet.
+      # This selects Partlet's code version, not the project's approved hash.
       - uses: vhata/partlet@PARTLET_RELEASE_SHA
         with:
           account-id: ${{ secrets.PARTLET_R2_ACCOUNT_ID }}

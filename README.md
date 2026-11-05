@@ -55,25 +55,32 @@ account with R2 enabled and Node/npm. You can use a default
 `workers.dev` address or your own domain managed by Cloudflare; those
 steps follow in the hosting guide. R2 and Workers are billable services.
 
-### 1. Install Partlet in a separate checkout
+### 1. Install Partlet
 
 Run these commands in the directory where you keep your checkouts:
 
 ```bash
 git clone https://github.com/vhata/partlet.git
 cd partlet
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python .
-bash scripts/install-gitleaks.sh .venv/bin
-PARTLET_DIR="$PWD"
+PARTLET_REV="$(git rev-parse HEAD)"
+bash scripts/install.sh --publisher-only
 SOURCE_REPO=/absolute/path/to/my-monorepo
 ```
 
-Replace `SOURCE_REPO` with your existing source checkout's absolute
-path. Keep these shell variables for the following commands. uv can
-download Python 3.12 if needed. The install includes the export tool;
-the final script installs the pinned secret scanner. This installation
-does not install development hooks in either repository.
+Replace `SOURCE_REPO` with your source checkout's absolute path. Keep
+these shell variables for the following commands. Record `PARTLET_REV`
+for the matching GitHub Action version later.
+
+The installer uses uv to install an isolated Python 3.12 application and
+put `partlet` on your PATH, then downloads the checksum-verified secret
+scanner. If your shell cannot find `partlet`, run `uv tool update-shell`
+and restart the shell. Installation does not install development hooks
+or change tracked files. You can remove the Partlet checkout afterward.
+
+Omit `--publisher-only` to install the Worker tools too; this requires
+Node/npm as described in the [installation guide](docs/INSTALLATION.md).
+That guide also covers installing directly from GitHub or a wheel,
+dependency locations, upgrades, and multiple deployments.
 
 ### 2. Choose a project
 
@@ -109,7 +116,7 @@ using [`previous_paths`](docs/PUBLISHING.md#manifest-reference).
 From the same terminal:
 
 ```bash
-"$PARTLET_DIR/.venv/bin/partlet" review foo --repo "$SOURCE_REPO" \
+partlet review foo --repo "$SOURCE_REPO" \
   --published-tip none
 ```
 
@@ -153,6 +160,8 @@ that copy too. If a macOS clone hangs, see
 
 - [Publish your first site](docs/GETTING_STARTED.md): Cloudflare and
   GitHub setup, then first-clone verification.
+- [Installation and upgrades](docs/INSTALLATION.md): installed tools,
+  independent deployment configs, and migration from an edited checkout.
 - [Publishing reference](docs/PUBLISHING.md): manifest fields, CLI and
   Action options, history changes, removal, and recovery.
 - [Worker guide](worker/README.md): local previews and HTTP behavior.

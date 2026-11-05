@@ -83,7 +83,7 @@ history and require explicit rewrite approval.
 
 ## Commands
 
-Run these from your Partlet checkout after the
+Run these from any directory after the
 [README installation](../README.md). Replace `/path/to/source` with an
 absolute path to your separate source checkout. The CLI uses
 `partlet.toml` there by default. Without `--repo`, it uses the current
@@ -91,11 +91,11 @@ directory as the source checkout.
 
 | Command | Effect |
 | -- | -- |
-| `.venv/bin/partlet review foo --repo /path/to/source` | Inspect exported history and, after confirmation, write approval into the local manifest. |
-| `.venv/bin/partlet build --repo /path/to/source --out /path/to/output --scan` | Scan and build approved projects into a local directory, without R2 access. |
-| `.venv/bin/partlet publish --repo /path/to/source` | Scan and publish approved projects to R2 using the credentials below. |
-| `.venv/bin/partlet unpublish foo --repo /path/to/source` | Confirm and delete the project's stored data, then rebuild the site index. |
-| `.venv/bin/partlet unlock --repo /path/to/source` | Report the publisher lock holder and confirm removal of a stale lock. |
+| `partlet review foo --repo /path/to/source` | Inspect exported history and, after confirmation, write approval into the local manifest. |
+| `partlet build --repo /path/to/source --out /path/to/output --scan` | Scan and build approved projects into a local directory, without R2 access. |
+| `partlet publish --repo /path/to/source` | Scan and publish approved projects to R2 using the credentials below. |
+| `partlet unpublish foo --repo /path/to/source` | Confirm and delete the project's stored data, then rebuild the site index. |
+| `partlet unlock --repo /path/to/source` | Report the publisher lock holder and confirm removal of a stale lock. |
 
 `review` and `build` export the local `site.branch`, including its
 committed history; uncommitted project edits are not exported. Update
@@ -109,11 +109,12 @@ internal storage keys, not an ordinary website root. Use the
 [local Worker preview](../worker/README.md#preview-local-publisher-output)
 to browse it or clone through the same routes as the public site.
 
-All commands accept `--manifest <file>` to use another manifest path;
-relative paths are resolved from the command's working directory.
-`unpublish` and `unlock` accept `--out <directory>` to operate on a
-local store instead of R2. Both ask for confirmation; `--yes` bypasses
-the prompt for automation after you have verified the intended action.
+All publisher commands accept `--manifest <file>` to use another
+manifest path; relative paths are resolved from the command's working
+directory. `unpublish` and `unlock` accept `--out <directory>` to
+operate on a local store instead of R2. Both ask for confirmation;
+`--yes` bypasses the prompt for automation after you have verified the
+intended action.
 
 `build` and `publish` accept `--summary <file>`; otherwise they append
 to `GITHUB_STEP_SUMMARY` when set. Summaries contain project outcomes,
@@ -122,18 +123,25 @@ refusals exit 2; project, lock or store failures exit 1; successful,
 unchanged or skipped-only runs exit 0. Check individual outcomes: a
 green run with every project `skipped` has published nothing.
 
+The installed tool also provides `partlet setup [--worker]` for explicit
+dependency installation, and `partlet worker` commands for independent
+Wrangler configurations, local preview, and user-run deployment. See
+[installation and upgrades](INSTALLATION.md) and the
+[first-site guide](GETTING_STARTED.md). These commands do not use the
+publisher's `--manifest` option or R2 write credentials.
+
 ## Review and approval
 
 For a project's first publication:
 
 ```bash
-.venv/bin/partlet review foo --repo /path/to/source --published-tip none
+partlet review foo --repo /path/to/source --published-tip none
 ```
 
 For a project already on your public site:
 
 ```bash
-.venv/bin/partlet review foo --repo /path/to/source
+partlet review foo --repo /path/to/source
 ```
 
 The report shows the export tip, every historical path (with deletions
@@ -266,11 +274,10 @@ fingerprints when it appears in both an original commit and a merge.
 Removing a project from the manifest stops future publication but does
 not delete the copy already stored. Remove its `[projects.NAME]` table,
 commit and push that change first, and verify any earlier publishing run
-has stopped. Set the R2 variables above, then run from the Partlet
-checkout:
+has stopped. Set the R2 variables above, then run:
 
 ```bash
-.venv/bin/partlet unpublish foo --repo /path/to/source
+partlet unpublish foo --repo /path/to/source
 ```
 
 The command shows the target and asks before deleting. It removes all

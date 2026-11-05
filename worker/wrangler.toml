@@ -1,9 +1,9 @@
 # Partlet Worker: serves one source's published projects from R2, read-only.
-# The user deploys it (npx wrangler deploy, from this directory) after
-# choosing an address and replacing placeholders; see docs/GETTING_STARTED.md.
-# For workers.dev, remove the whole [[routes]] block and add workers_dev = true
-# here at the top level, before [vars].
-# Agents never deploy it or provision the bucket, Worker or domain.
+# Development defaults and the template for `partlet worker init`.
+# Users keep deployment settings in their own config directory and run
+# `partlet worker deploy --config PATH`; see docs/GETTING_STARTED.md.
+# Use `partlet worker init DIRECTORY --workers-dev` for the default address.
+# Agents never deploy or provision the bucket, Worker or domain.
 name = "partlet"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"

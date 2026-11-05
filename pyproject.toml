@@ -35,6 +35,35 @@ path = "src/partlet/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/partlet"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"worker/src" = "partlet/_assets/worker/src"
+"worker/package.json" = "partlet/_assets/worker/package.json"
+"worker/package-lock.json" = "partlet/_assets/worker/package-lock.json"
+"worker/.node-version" = "partlet/_assets/worker/.node-version"
+"worker/wrangler.toml" = "partlet/_assets/worker/wrangler.toml"
+"worker/tools/seed-r2.mjs" = "partlet/_assets/worker/tools/seed-r2.mjs"
+"scripts/install-gitleaks.sh" = "partlet/_assets/scripts/install-gitleaks.sh"
+
+# Explicit inputs keep local npm dependencies and worktree caches out of
+# source releases, including builds from a Git worktree's .git file.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/partlet/**/*.py",
+  "/src/partlet/site/templates/*.html",
+  "/src/partlet/site/style.css",
+  "/scripts/install.sh",
+  "/scripts/install-gitleaks.sh",
+  "/worker/src/*.ts",
+  "/worker/tools/seed-r2.mjs",
+  "/worker/package.json",
+  "/worker/package-lock.json",
+  "/worker/.node-version",
+  "/worker/wrangler.toml",
+  "/README.md",
+  "/LICENSE",
+  "/pyproject.toml",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
