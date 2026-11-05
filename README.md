@@ -160,6 +160,8 @@ that copy too. If a macOS clone hangs, see
 
 - [Publish your first site](docs/GETTING_STARTED.md): Cloudflare and
   GitHub setup, then first-clone verification.
+- [Installation and upgrades](docs/INSTALLATION.md): installed tools,
+  independent deployment configs, and migration from an edited checkout.
 - [Publishing reference](docs/PUBLISHING.md): manifest fields, CLI and
   Action options, history changes, removal, and recovery.
 - [Worker guide](worker/README.md): local previews and HTTP behavior.
