@@ -288,7 +288,7 @@ def _parser() -> argparse.ArgumentParser:
         "--bucket",
         metavar="BUCKET",
         default="replace-me",
-        help="existing R2 bucket name",
+        help="R2 bucket name",
     )
     address = init.add_mutually_exclusive_group()
     address.add_argument("--domain", metavar="HOST", help="custom domain")
@@ -312,6 +312,27 @@ def _parser() -> argparse.ArgumentParser:
         "show the authenticated Cloudflare account",
         "Show the Cloudflare account currently authenticated with Wrangler.",
         "  partlet worker whoami",
+    )
+    bucket = _command(
+        worker_sub,
+        "bucket-create",
+        "create the configured R2 bucket",
+        "Create the R2 bucket named in your wrangler.toml using standard "
+        "storage and the default jurisdiction. This is billable and requires "
+        "confirmation. Set account_id in the config first. New buckets are "
+        "private by default; this command does not deploy a Worker "
+        "or create publisher credentials. Skip this command for an existing bucket.",
+        "  partlet worker bucket-create --config ./site/wrangler.toml",
+    )
+    bucket.add_argument(
+        "--config",
+        type=Path,
+        metavar="FILE",
+        required=True,
+        help="deployment wrangler.toml with an explicit account_id",
+    )
+    bucket.add_argument(
+        "--yes", action="store_true", help="confirm billable bucket creation"
     )
     preview = _command(
         worker_sub,

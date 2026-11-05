@@ -345,6 +345,154 @@ def test_explicit_confirmation_passes_cloudflare_auth_but_not_publisher_keys(
     assert "PARTLET_R2_SECRET_ACCESS_KEY" not in calls[0][2]
 
 
+def bucket_config(config):
+    account = "a" * 32
+    config.write_text(f'account_id = "{account}"\n' + config.read_text())
+    return account
+
+
+def test_bucket_creation_requires_explicit_account_before_confirmation(
+    config, monkeypatch, capsys
+):
+    calls = capture_runs(monkeypatch)
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "b" * 32)
+
+    def unexpected(prompt):
+        pytest.fail("missing account must fail before confirmation")
+
+    monkeypatch.setattr("builtins.input", unexpected)
+    assert main(["worker", "bucket-create", "--config", str(config)]) == 2
+    assert "set account_id" in capsys.readouterr().err
+    assert not calls
+
+
+def test_bucket_creation_cancellation_reports_billable_target(
+    config, monkeypatch, capsys
+):
+    account = bucket_config(config)
+    original = config.read_bytes()
+    calls = capture_runs(monkeypatch)
+    prompts = []
+
+    def decline(prompt):
+        prompts.append(prompt)
+        return "n"
+
+    monkeypatch.setattr("builtins.input", decline)
+    assert main(["worker", "bucket-create", "--config", str(config)]) == 1
+    output = capsys.readouterr().out
+    assert "Billable" in output
+    assert "my-public-bucket" in output
+    assert account in output
+    assert "standard storage" in output
+    assert "default jurisdiction" in output
+    assert "cancelled" in output
+    assert prompts and not calls
+    assert config.read_bytes() == original
+    assert not (config.parent / ".partlet").exists()
+
+
+@pytest.mark.parametrize("answer", ["yes", "flag"])
+def test_bucket_creation_isolates_target_and_preserves_config(
+    config, runtime, monkeypatch, answer
+):
+    account = bucket_config(config)
+    original = config.read_bytes()
+    (config.parent / ".env").write_text("CLOUDFLARE_ACCOUNT_ID=wrong-account\n")
+    (config.parent / ".dev.vars").write_text("SOURCE=wrong-source\n")
+    inherited = {
+        "CLOUDFLARE_ACCOUNT_ID": "b" * 32,
+        "CF_ACCOUNT_ID": "c" * 32,
+        "CLOUDFLARE_API_BASE_URL": "https://wrong.example/",
+        "CF_API_BASE_URL": "https://other.example/",
+        "CLOUDFLARE_COMPLIANCE_REGION": "fedramp_high",
+        "CLOUDFLARE_ENV": "production",
+        "WRANGLER_ENV": "production",
+        "PARTLET_R2_SECRET_ACCESS_KEY": "publisher-secret",
+        "AWS_SECRET_ACCESS_KEY": "aws-secret",
+        "R2_SECRET_ACCESS_KEY": "r2-secret",
+        "CLOUDFLARE_API_TOKEN": "wrangler-token",
+    }
+    for key, value in inherited.items():
+        monkeypatch.setenv(key, value)
+    prompts = []
+
+    def confirm(prompt):
+        if answer == "flag":
+            pytest.fail("--yes must skip interactive confirmation")
+        prompts.append(prompt)
+        return "y"
+
+    monkeypatch.setattr("builtins.input", confirm)
+    calls = capture_runs(monkeypatch, result=17)
+    args = ["worker", "bucket-create", "--config", str(config)]
+    if answer == "flag":
+        args.append("--yes")
+    assert main(args) == 17
+    assert len(calls) == 1
+    command, cwd, env, effective = calls[0]
+    assert command[:5] == [
+        str(runtime.worker_root() / "node_modules" / ".bin" / "wrangler"),
+        "r2",
+        "bucket",
+        "create",
+        "my-public-bucket",
+    ]
+    assert command[5:] == [
+        "--config",
+        str(cwd / "wrangler.toml"),
+        "--update-config=false",
+    ]
+    assert effective == {"account_id": account}
+    assert env["CLOUDFLARE_ACCOUNT_ID"] == account
+    assert env["CLOUDFLARE_API_TOKEN"] == "wrangler-token"
+    assert not any(
+        key in env
+        for key in inherited
+        if key not in ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN")
+    )
+    assert env["CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV"] == "false"
+    assert env["WRANGLER_SEND_METRICS"] == "false"
+    assert cwd.parent == config.parent / ".partlet"
+    assert not cwd.exists()
+    assert config.read_bytes() == original
+    assert bool(prompts) == (answer == "yes")
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ('bucket_name = "my-public-bucket"', 'bucket_name = "replace-me"'),
+        ('bucket_name = "my-public-bucket"', 'bucket_name = "bad/name"'),
+        ('SOURCE = "my-monorepo"', 'SOURCE = "replace-me"'),
+        ('account_id = "' + "a" * 32 + '"', 'account_id = "bad-account"'),
+    ],
+)
+def test_invalid_bucket_configuration_fails_before_confirmation(
+    config, monkeypatch, old, new
+):
+    bucket_config(config)
+    change(config, old, new)
+    calls = capture_runs(monkeypatch)
+
+    def unexpected(prompt):
+        pytest.fail("invalid config must fail before confirmation")
+
+    monkeypatch.setattr("builtins.input", unexpected)
+    assert main(["worker", "bucket-create", "--config", str(config)]) == 2
+    assert not calls
+
+
+def test_bucket_creation_needs_no_configured_public_address(config, monkeypatch):
+    bucket_config(config)
+    change(
+        config, 'pattern = "code.example.com"', 'pattern = "partlet.replace-me.example"'
+    )
+    calls = capture_runs(monkeypatch)
+    assert main(["worker", "bucket-create", "--config", str(config), "--yes"]) == 0
+    assert len(calls) == 1
+
+
 def test_preview_seeds_only_fresh_isolated_state(config, monkeypatch, tmp_path):
     out = tmp_path / "built"
     (out / "my-monorepo" / "p").mkdir(parents=True)
