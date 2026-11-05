@@ -289,8 +289,8 @@ def _parser() -> argparse.ArgumentParser:
         "create the configured R2 bucket",
         "Create the R2 bucket named in your wrangler.toml using standard "
         "storage and the default jurisdiction. This is billable and requires "
-        "confirmation. Set account_id in the config first. Direct public "
-        "bucket access stays disabled; this command does not deploy a Worker "
+        "confirmation. Set account_id in the config first. New buckets are "
+        "private by default; this command does not deploy a Worker "
         "or create publisher credentials. Skip this command for an existing bucket.",
         "  partlet worker bucket-create --config ./site/wrangler.toml",
     )

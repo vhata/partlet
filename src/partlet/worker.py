@@ -274,7 +274,7 @@ def _create_bucket(args, config: WorkerConfig, wrangler: str, confirm) -> int:
     print(
         f"Billable: create R2 bucket {config.bucket!r} in Cloudflare account "
         f"{account}, using standard storage and the default jurisdiction. "
-        "Direct public bucket access remains disabled."
+        "New buckets are private by default."
     )
     if not args.yes and not confirm("Create this R2 bucket on Cloudflare? [y/N] "):
         print("Bucket creation cancelled.")
