@@ -33,14 +33,19 @@ class Finding:
 
 
 def find_gitleaks() -> str:
-    """The gitleaks beside this Python (a virtualenv's bin), else the one on PATH."""
+    """Prefer Partlet's managed scanner, then the development venv and PATH."""
+    from partlet.runtime import managed_gitleaks
+
+    managed = managed_gitleaks()
+    if managed.is_file():
+        return str(managed)
     beside = Path(sys.executable).parent / "gitleaks"
     if beside.is_file():
         return str(beside)
     found = shutil.which("gitleaks")
     if found is None:
         raise ScanError(
-            "gitleaks not found; install it with bash scripts/install-gitleaks.sh"
+            "gitleaks not found; run `partlet setup` to install the pinned scanner"
         )
     return found
 
@@ -56,7 +61,9 @@ def _env() -> dict[str, str]:
     return env
 
 
-def check_gitleaks(binary: str | None = None) -> str:
+def check_gitleaks(
+    binary: str | None = None, *, env: dict[str, str] | None = None
+) -> str:
     """Return the path of a gitleaks that is exactly the pinned version."""
     binary = binary or find_gitleaks()
     try:
@@ -64,7 +71,7 @@ def check_gitleaks(binary: str | None = None) -> str:
             [binary, "version"],
             capture_output=True,
             text=True,
-            env=_env(),
+            env=_env() if env is None else env,
             check=False,
         )
     except OSError as e:
@@ -73,7 +80,7 @@ def check_gitleaks(binary: str | None = None) -> str:
     if proc.returncode != 0 or version != GITLEAKS_VERSION:
         raise ScanError(
             f"{binary} reports version {version or '(none)'}; partlet needs gitleaks "
-            f"{GITLEAKS_VERSION} exactly (bash scripts/install-gitleaks.sh)"
+            f"{GITLEAKS_VERSION} exactly (run `partlet setup`)"
         )
     return binary
 
