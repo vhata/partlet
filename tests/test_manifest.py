@@ -1,6 +1,6 @@
 import pytest
 
-from partlet.manifest import ManifestError, parse_manifest
+from partlet.manifest import ManifestError, ThemeConfig, parse_manifest
 
 FULL = """
 [site]
@@ -128,3 +128,38 @@ def test_supported_paths_keep_existing_normalization(path, expected):
 def test_invalid_toml():
     with pytest.raises(ManifestError, match="invalid TOML"):
         parse_manifest("[site\n")
+
+
+def test_theme_defaults_and_explicit_choices():
+    assert parse_manifest(SITE).site.theme == ThemeConfig()
+    assert parse_manifest(
+        SITE + '[site.theme]\nname = "paper"\nmode = "dark"'
+    ).site.theme == ThemeConfig(name="paper", mode="dark")
+    assert parse_manifest(
+        SITE + '[site.theme]\npath = "themes/copper"'
+    ).site.theme == ThemeConfig(name=None, path="themes/copper")
+
+
+@pytest.mark.parametrize(
+    "body, message",
+    [
+        ('theme = "paper"', "must be a table"),
+        ('[site.theme]\nname = "missing"', "name must be one of"),
+        ("[site.theme]\nname = 1", "name must be a string"),
+        ('[site.theme]\nmode = "system"', "mode must be one of"),
+        ("[site.theme]\nmode = true", "mode must be a string"),
+        ('[site.theme]\npath = "themes/x"\nname = "classic"', "mutually exclusive"),
+        ('[site.theme]\ncolour = "green"', "unknown key"),
+        ('[site.theme]\npath = ""', "relative directory"),
+        ('[site.theme]\npath = "/themes/x"', "relative directory"),
+        ('[site.theme]\npath = "themes/../private"', "relative directory"),
+        ('[site.theme]\npath = "themes/./x"', "relative directory"),
+        ('[site.theme]\npath = "themes//x"', "relative directory"),
+        ('[site.theme]\npath = "themes/x/"', "relative directory"),
+        ('[site.theme]\npath = "C:/private"', "relative directory"),
+        ("[site.theme]\npath = 'themes\\x'", "relative directory"),
+    ],
+)
+def test_invalid_theme_config(body, message):
+    with pytest.raises(ManifestError, match=message):
+        parse_manifest(SITE + body)

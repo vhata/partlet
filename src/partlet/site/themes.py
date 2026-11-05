@@ -82,6 +82,10 @@ def _asset_type(path: object) -> str:
         or any(not _SEGMENT.fullmatch(part) for part in parts)
     ):
         raise ThemeError(f"invalid theme asset path {path!r}; use assets/<raster file>")
+    if "." not in parts[-1]:
+        raise ThemeError(
+            f"unsupported theme asset {path!r}; a raster filename extension is required"
+        )
     extension = parts[-1].rsplit(".", 1)[-1]
     if extension not in _ASSET_TYPES:
         raise ThemeError(
@@ -145,6 +149,33 @@ def _metadata(data: bytes) -> dict:
     return raw
 
 
+def _without_css_comments(css: str) -> str:
+    """Remove comments outside strings; quoted URL contents stay literal."""
+    output = []
+    quote = None
+    i = 0
+    while i < len(css):
+        char = css[i]
+        if quote is not None:
+            output.append(char)
+            if char == quote:
+                quote = None
+            i += 1
+        elif char in ("'", '"'):
+            quote = char
+            output.append(char)
+            i += 1
+        elif css.startswith("/*", i):
+            end = css.find("*/", i + 2)
+            if end == -1:
+                raise ThemeError("theme style.css contains an unterminated comment")
+            i = end + 2
+        else:
+            output.append(char)
+            i += 1
+    return "".join(output)
+
+
 def _check_css(data: bytes, assets: set[str]) -> None:
     try:
         css = data.decode("utf-8")
@@ -157,9 +188,15 @@ def _check_css(data: bytes, assets: set[str]) -> None:
         raise ThemeError(
             "theme CSS escapes are unsupported in format 1; use literal characters"
         )
-    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    css = _without_css_comments(css)
     if re.search(r"@(?:import|font-face)\b", css, re.IGNORECASE):
         raise ThemeError("theme format 1 does not support CSS imports or custom fonts")
+    if re.search(
+        r"(?:\bimage(?:-set)?|-webkit-image-set|\bsrc)\s*\(", css, re.IGNORECASE
+    ):
+        raise ThemeError(
+            "theme format 1 requires url() image references; image(), image-set() and src() are unsupported"
+        )
     for match in _URL.finditer(css):
         value = next(group for group in match.groups() if group is not None)
         # Existing PAGE_CSP permits HTTPS image requests. These remain

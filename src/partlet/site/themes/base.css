@@ -76,6 +76,7 @@ pre.clone { background: var(--code-bg); padding: 8px 12px; border-radius: var(--
 table.listing { width: 100%; border-collapse: collapse; margin: 12px 0; table-layout: fixed; }
 table.listing td { padding: 6px 8px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 table.listing td.size { width: 6.5em; color: var(--muted); text-align: right; white-space: nowrap; }
+table.projects .updated { color: var(--muted); text-align: right; }
 article.readme { border-top: 1px solid var(--line); margin-top: var(--space); padding-top: 8px; font-family: var(--prose-font); overflow-wrap: anywhere; }
 article.readme img { max-width: 100%; height: auto; }
 article.readme pre { background: var(--code-bg); padding: 12px; overflow-x: auto; }
@@ -87,6 +88,13 @@ article.readme th, article.readme td { border: 1px solid var(--line); padding: 6
 .hl .linenos { color: var(--muted); user-select: none; }
 .hl .linenos a { color: inherit; }
 .hl a:target { scroll-margin-block: var(--space); }
+@media (max-width: 640px) {
+  table.projects, table.projects tbody { display: block; }
+  table.projects tr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
+  table.projects td { display: block; border: 0; padding: 0; min-width: 0; }
+  table.projects .project-name { font-weight: 600; }
+  table.projects .updated { text-align: left; }
+}
 @media (max-width: 480px) {
   main { padding: min(var(--space), 12px); }
   table.listing td { padding: 6px 4px; }
