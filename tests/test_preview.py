@@ -176,6 +176,7 @@ def test_preview_includes_stale_approval_without_changing_it(
 def test_alternate_manifest_and_branch_control_preview_inputs(
     mono, tmp_path, configured, prepared, monkeypatch
 ):
+    mono.commit("manifest shared by both branches")
     git("checkout", "-q", "-b", "preview-source", cwd=mono.path)
     mono.write("foo/README.md", "# Alternate branch\n")
     mono.commit("alternate source")
