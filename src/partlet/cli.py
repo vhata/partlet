@@ -40,11 +40,15 @@ def _repo_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--repo",
         type=Path,
+        metavar="DIR",
         default=Path.cwd(),
-        help="monorepo checkout (default: current directory)",
+        help="source checkout (default: current directory)",
     )
     parser.add_argument(
-        "--manifest", type=Path, help="manifest file (default: <repo>/partlet.toml)"
+        "--manifest",
+        type=Path,
+        metavar="FILE",
+        help="manifest file (default: <repo>/partlet.toml)",
     )
 
 
@@ -53,68 +57,104 @@ def _summary_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--summary",
         type=Path,
+        metavar="FILE",
         default=Path(default) if default else None,
-        help="append a Markdown summary here (default: $GITHUB_STEP_SUMMARY)",
+        help="append a Markdown summary (default: $GITHUB_STEP_SUMMARY)",
+    )
+
+
+class _HelpFormatter(argparse.HelpFormatter):
+    """Wrap prose while preserving the layout of command examples."""
+
+    def _fill_text(self, text, width, indent):
+        if "\n" in text:
+            return argparse.RawDescriptionHelpFormatter._fill_text(
+                self, text, width, indent
+            )
+        return super()._fill_text(text, width, indent)
+
+
+def _command(sub, name, summary, description, examples):
+    return sub.add_parser(
+        name,
+        help=summary,
+        description=description,
+        epilog=f"Examples:\n{examples}",
+        formatter_class=_HelpFormatter,
     )
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="partlet")
+    parser = argparse.ArgumentParser(
+        prog="partlet",
+        description=(
+            "Publish projects from a private Git repository as public, read-only "
+            "repositories and a browsable website."
+        ),
+        epilog=(
+            "Start in your source repository, with projects in partlet.toml:\n"
+            "  partlet review foo --first-publish       # inspect and approve history\n"
+            "  partlet build --scan --out ./preview     # build approved projects locally\n"
+            "\n"
+            "After hosting setup, commit the approval and push to publish through\n"
+            "your GitHub Action. Later fast-forward changes publish automatically.\n"
+            "\n"
+            "Run 'partlet worker' for local preview and hosting commands.\n"
+            "Use 'partlet COMMAND --help' for options and examples.\n"
+            "Hosting setup: https://github.com/vhata/partlet/blob/main/docs/GETTING_STARTED.md"
+        ),
+        formatter_class=_HelpFormatter,
+    )
     parser.add_argument("--version", action="version", version=f"partlet {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", title="commands", metavar="COMMAND")
 
-    setup = sub.add_parser("setup", help="install Partlet's pinned external tools")
-    setup.add_argument(
-        "--worker", action="store_true", help="also install the Worker deployment tools"
+    review = _command(
+        sub,
+        "review",
+        "inspect and approve a project's exported history",
+        "Inspect a project's full exported history and scan it for secrets. "
+        "After your confirmation, write its approval to partlet.toml. "
+        "Nothing is uploaded. By default, compare with the public site's tip; "
+        "use --first-publish only when the project has never been published.",
+        "  partlet review foo --first-publish\n"
+        "  partlet review foo\n"
+        "  partlet review foo --repo /path/to/source",
     )
-
-    worker = sub.add_parser(
-        "worker", help="configure and run the installed public Worker"
-    )
-    worker_sub = worker.add_subparsers(dest="worker_command", required=True)
-    init = worker_sub.add_parser(
-        "init", help="create a separate deployment configuration"
-    )
-    init.add_argument("directory", type=Path)
-    init.add_argument("--name", default="partlet", help="Cloudflare Worker name")
-    init.add_argument("--source", default="replace-me", help="manifest site.source")
-    init.add_argument("--bucket", default="replace-me", help="existing R2 bucket name")
-    address = init.add_mutually_exclusive_group()
-    address.add_argument("--domain", help="custom domain")
-    address.add_argument(
-        "--workers-dev",
+    review.add_argument("name", metavar="PROJECT", help="project name in partlet.toml")
+    _repo_args(review)
+    review.add_argument(
+        "--allow-rewrite",
         action="store_true",
-        help="use Cloudflare's workers.dev address",
+        help="authorize replacing the exact published tip after review",
     )
-    init.add_argument("--account-id", help="Cloudflare account ID")
-    worker_sub.add_parser("login", help="log in to Cloudflare with Wrangler")
-    worker_sub.add_parser("whoami", help="show Wrangler's authenticated account")
-    deploy = worker_sub.add_parser("deploy", help="deploy the configured Worker")
-    deploy.add_argument("--config", type=Path, required=True, help="your wrangler.toml")
-    deploy.add_argument(
-        "--dry-run", action="store_true", help="bundle locally without deploying"
+    published_tip = review.add_mutually_exclusive_group()
+    published_tip.add_argument(
+        "--first-publish",
+        action="store_const",
+        dest="published_tip",
+        const="none",
+        help="review a never-published project without contacting the public site",
     )
-    deploy.add_argument(
-        "--yes", action="store_true", help="confirm the billable deployment"
-    )
-    preview = worker_sub.add_parser(
-        "preview", help="serve publisher output with local simulated R2"
-    )
-    preview.add_argument(
-        "--config", type=Path, required=True, help="your wrangler.toml"
-    )
-    preview.add_argument(
-        "--out", type=Path, required=True, help="partlet build output directory"
-    )
-    preview.add_argument(
-        "--port", type=int, default=8787, help="localhost port (default: 8787)"
+    published_tip.add_argument(
+        "--published-tip",
+        metavar="SHA|none",
+        help="override the public tip with a full commit hash or 'none'",
     )
 
-    build = sub.add_parser(
-        "build", help="publish every approved project into a local directory"
+    build = _command(
+        sub,
+        "build",
+        "build all approved projects into a local store",
+        "Export every approved project into a local object store. Unapproved "
+        "projects are skipped. Output is for 'partlet worker preview', "
+        "not a directory to open directly in a browser. Nothing is uploaded.",
+        "  partlet build --scan --out ./preview\n"
+        "  partlet build --scan --out ./preview --repo /path/to/source",
     )
     _repo_args(build)
-    build.add_argument("--out", type=Path, required=True, help="output directory")
+    build.add_argument(
+        "--out", type=Path, metavar="DIR", required=True, help="local output store"
+    )
     build.add_argument(
         "--scan",
         action="store_true",
@@ -122,40 +162,188 @@ def _parser() -> argparse.ArgumentParser:
     )
     _summary_arg(build)
 
-    publish = sub.add_parser(
-        "publish", help="publish every approved project to R2 (the CI entry point)"
+    publish = _command(
+        sub,
+        "publish",
+        "publish all approved projects to R2 (used by CI)",
+        "Scan and publish every approved project to Cloudflare R2. Requires "
+        "PARTLET_R2_* credentials, HEAD at the publishing branch tip, and a "
+        "committed manifest. Normally run by your GitHub Action after a push.",
+        "  partlet publish\n"
+        "  partlet publish --repo /path/to/source --summary ./summary.md",
     )
     _repo_args(publish)
     _summary_arg(publish)
 
-    unpublish = sub.add_parser(
-        "unpublish", help="delete a project's stored objects and update the index"
+    worker = _command(
+        sub,
+        "worker",
+        "configure, preview and deploy the public site",
+        "Manage the public Cloudflare Worker using a deployment configuration "
+        "you own. Preview uses local simulated R2; deployment changes your "
+        "Cloudflare account and is billable.",
+        "  partlet worker init ./site --source my-monorepo --bucket public-code --workers-dev\n"
+        "  partlet worker preview --config ./site/wrangler.toml --out ./preview\n"
+        "  partlet worker deploy --config ./site/wrangler.toml --dry-run\n"
+        "\nUse 'partlet worker COMMAND --help' for options and examples.",
     )
-    unpublish.add_argument("name", help="project name")
-    _repo_args(unpublish)
-    unpublish.add_argument("--out", type=Path, help="local store instead of R2")
-    unpublish.add_argument("--yes", action="store_true", help="do not ask")
-
-    review = sub.add_parser(
-        "review", help="inspect exported history and approve its tip"
+    worker.set_defaults(command_help=worker)
+    worker_sub = worker.add_subparsers(
+        dest="worker_command", title="commands", metavar="COMMAND"
     )
-    review.add_argument("name", help="project name")
-    _repo_args(review)
-    review.add_argument(
-        "--allow-rewrite",
+    init = _command(
+        worker_sub,
+        "init",
+        "create a deployment configuration",
+        "Write wrangler.toml and a .gitignore in DIR without creating cloud "
+        "resources. Existing configurations are never replaced. SOURCE must "
+        "match site.source in your source repository's partlet.toml.",
+        "  partlet worker init ./site --source my-monorepo --bucket public-code --workers-dev\n"
+        "  partlet worker init ./site --source my-monorepo --bucket public-code --domain code.example.com",
+    )
+    init.add_argument(
+        "directory", type=Path, metavar="DIR", help="deployment directory"
+    )
+    init.add_argument(
+        "--name",
+        metavar="NAME",
+        default="partlet",
+        help="Worker name (default: partlet)",
+    )
+    init.add_argument(
+        "--source", metavar="SOURCE", default="replace-me", help="manifest site.source"
+    )
+    init.add_argument(
+        "--bucket",
+        metavar="BUCKET",
+        default="replace-me",
+        help="existing R2 bucket name",
+    )
+    address = init.add_mutually_exclusive_group()
+    address.add_argument("--domain", metavar="HOST", help="custom domain")
+    address.add_argument(
+        "--workers-dev",
         action="store_true",
-        help="authorize replacing the exact published tip after review",
+        help="use Cloudflare's workers.dev address",
     )
-    review.add_argument(
-        "--published-tip",
-        metavar="SHA|none",
-        help="published tip override instead of reading the public site",
+    init.add_argument("--account-id", metavar="ID", help="Cloudflare account ID")
+    _command(
+        worker_sub,
+        "login",
+        "log in to Cloudflare",
+        "Open Wrangler's browser login to authorize Worker management. "
+        "Publisher R2 credentials are configured separately.",
+        "  partlet worker login",
+    )
+    _command(
+        worker_sub,
+        "whoami",
+        "show the authenticated Cloudflare account",
+        "Show the Cloudflare account currently authenticated with Wrangler.",
+        "  partlet worker whoami",
+    )
+    preview = _command(
+        worker_sub,
+        "preview",
+        "serve a build locally with simulated R2",
+        "Seed local simulated R2 from 'partlet build' output and serve the "
+        "public site at localhost. The deployment SOURCE must match the build. "
+        "No cloud resources are created. Stop the server with Ctrl-C.",
+        "  partlet build --scan --out ./preview\n"
+        "  partlet worker preview --config ./site/wrangler.toml --out ./preview",
+    )
+    preview.add_argument(
+        "--config",
+        type=Path,
+        metavar="FILE",
+        required=True,
+        help="deployment wrangler.toml",
+    )
+    preview.add_argument(
+        "--out",
+        type=Path,
+        metavar="DIR",
+        required=True,
+        help="partlet build output store",
+    )
+    preview.add_argument(
+        "--port",
+        type=int,
+        metavar="PORT",
+        default=8787,
+        help="localhost port (default: 8787)",
+    )
+    deploy = _command(
+        worker_sub,
+        "deploy",
+        "deploy the configured Worker to Cloudflare",
+        "Deploy the installed Worker using your wrangler.toml. Deployment "
+        "is billable and requires confirmation. Use --dry-run to validate "
+        "and bundle locally without deploying.",
+        "  partlet worker deploy --config ./site/wrangler.toml --dry-run\n"
+        "  partlet worker deploy --config ./site/wrangler.toml",
+    )
+    deploy.add_argument(
+        "--config",
+        type=Path,
+        metavar="FILE",
+        required=True,
+        help="deployment wrangler.toml",
+    )
+    deploy.add_argument(
+        "--dry-run", action="store_true", help="bundle locally without deploying"
+    )
+    deploy.add_argument(
+        "--yes", action="store_true", help="confirm the billable deployment"
     )
 
-    unlock = sub.add_parser("unlock", help="remove a stopped publisher's stale lock")
+    setup = _command(
+        sub,
+        "setup",
+        "install pinned external tools",
+        "Download and install the pinned secret scanner into Partlet's "
+        "user-data directory. Add --worker to also install the Worker tools "
+        "(requires Node/npm). Normal commands never download missing tools.",
+        "  partlet setup\n  partlet setup --worker",
+    )
+    setup.add_argument(
+        "--worker", action="store_true", help="also install the Worker deployment tools"
+    )
+
+    unpublish = _command(
+        sub,
+        "unpublish",
+        "delete a project's public copy",
+        "Delete a project's stored objects and rebuild the site index. First "
+        "remove its manifest entry and push that change so the next publish "
+        "does not restore it. Uses R2 by default; --out selects a local store.",
+        "  partlet unpublish foo\n  partlet unpublish foo --out ./preview",
+    )
+    unpublish.add_argument("name", metavar="PROJECT", help="public project name")
+    _repo_args(unpublish)
+    unpublish.add_argument(
+        "--out", type=Path, metavar="DIR", help="local store instead of R2"
+    )
+    unpublish.add_argument(
+        "--yes", action="store_true", help="confirm deletion without prompting"
+    )
+
+    unlock = _command(
+        sub,
+        "unlock",
+        "remove a stopped publisher's stale lock",
+        "Inspect and remove a source's publishing lock after verifying the "
+        "holder has stopped. Removing an active publisher's lock permits "
+        "overlapping writes. Uses R2 by default; --out selects a local store.",
+        "  partlet unlock\n  partlet unlock --out ./preview",
+    )
     _repo_args(unlock)
-    unlock.add_argument("--out", type=Path, help="local store instead of R2")
-    unlock.add_argument("--yes", action="store_true", help="do not ask")
+    unlock.add_argument(
+        "--out", type=Path, metavar="DIR", help="local store instead of R2"
+    )
+    unlock.add_argument(
+        "--yes", action="store_true", help="confirm removal without prompting"
+    )
 
     return parser
 
@@ -431,7 +619,14 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 0
+    if args.command == "worker" and args.worker_command is None:
+        args.command_help.print_help()
+        return 0
     previous = signal.signal(signal.SIGTERM, _exit_on_sigterm)
     try:
         command = COMMANDS[args.command]

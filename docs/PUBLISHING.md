@@ -89,6 +89,11 @@ absolute path to your separate source checkout. The CLI uses
 `partlet.toml` there by default. Without `--repo`, it uses the current
 directory as the source checkout.
 
+Run `partlet` (or `partlet --help`) for a workflow overview. Every
+command has its own `--help`, including examples; `partlet worker` lists
+the Worker commands. These help commands need no configuration,
+installed external tools or cloud credentials.
+
 | Command | Effect |
 | -- | -- |
 | `partlet review foo --repo /path/to/source` | Inspect exported history and, after confirmation, write approval into the local manifest. |
@@ -135,7 +140,7 @@ publisher's `--manifest` option or R2 write credentials.
 For a project's first publication:
 
 ```bash
-partlet review foo --repo /path/to/source --published-tip none
+partlet review foo --repo /path/to/source --first-publish
 ```
 
 For a project already on your public site:
@@ -153,9 +158,12 @@ before answering yes.
 The default command reads the published tip from the public site's
 `<base_url>/<name>/info/refs` and needs no R2 credentials. When the site
 is unavailable, use `--published-tip <full-sha>` with its known
-published tip. `--published-tip none` asserts that no history is
-published; it is not a way to bypass an existing publication. A
-malformed or ambiguous refs response fails the review.
+published tip. `--first-publish` skips that lookup and asserts that the
+project has never been published. The older spelling
+`--published-tip none` has the same effect and remains supported; use
+only one of these options. For an existing publication, use its known
+tip or the default public-site lookup. A malformed or ambiguous refs
+response fails the review.
 
 Review scans the full exported history using the source root's gitleaks
 configuration. Findings prevent approval. A non-fast-forward export
