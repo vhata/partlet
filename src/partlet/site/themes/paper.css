@@ -1,0 +1,56 @@
+/* Paper: warm pages, bookish prose, generous vertical rhythm. */
+:root {
+  --fg: #302b26;
+  --muted: #6a5f54;
+  --bg: #fffdf7;
+  --line: #d9d1c2;
+  --link: #8a3c16;
+  --code-bg: #f4efe3;
+  --focus: #8a3c16;
+  --prose-font: Georgia, Cambria, "Times New Roman", serif;
+  --font-size: 16px;
+  --line-height: 1.65;
+  --content-width: 920px;
+  --space: 24px;
+  --radius: 3px;
+  --syntax-comment: #6a5f54;
+  --syntax-keyword: #7a3d87;
+  --syntax-string: #32633b;
+  --syntax-number: #8a3c16;
+  --syntax-name: #225e80;
+  --syntax-error: #ae2e24;
+}
+:root[data-mode="dark"] {
+  --fg: #eee5d5;
+  --muted: #b9ad99;
+  --bg: #201e1a;
+  --line: #494235;
+  --link: #edb47d;
+  --code-bg: #2a2721;
+  --focus: #edb47d;
+  --syntax-comment: #b9ad99;
+  --syntax-keyword: #d9b2e2;
+  --syntax-string: #abd0a0;
+  --syntax-number: #edb47d;
+  --syntax-name: #9dc6de;
+  --syntax-error: #ffaaa0;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-mode="auto"] {
+    --fg: #eee5d5;
+    --muted: #b9ad99;
+    --bg: #201e1a;
+    --line: #494235;
+    --link: #edb47d;
+    --code-bg: #2a2721;
+    --focus: #edb47d;
+    --syntax-comment: #b9ad99;
+    --syntax-keyword: #d9b2e2;
+    --syntax-string: #abd0a0;
+    --syntax-number: #edb47d;
+    --syntax-name: #9dc6de;
+    --syntax-error: #ffaaa0;
+  }
+}
+article.readme { font-size: 1.125em; }
+article.readme h1, article.readme h2, article.readme h3 { line-height: 1.25; }

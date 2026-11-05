@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,11 @@ from partlet.site.render import (
     render_project,
     render_site_index,
     site_stylesheet,
+)
+from partlet.site.themes import (
+    ResolvedTheme,
+    ThemePresentation,
+    resolve_theme,
 )
 from partlet.site.tree import TreeError, read_tree
 from partlet.store import LocalPathError, LocalStore, Store, StoreError
@@ -99,9 +105,13 @@ def project_prefix(source: str, name: str) -> str:
     return f"{source}/p/{name}"
 
 
-def build_id(tip: str, description: str, base_url: str) -> str:
+def build_id(
+    tip: str, description: str, base_url: str, theme_digest: str | None = None
+) -> str:
+    if theme_digest is None:
+        theme_digest = resolve_theme().digest
     digest = hashlib.sha256(
-        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}".encode()
+        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}\0{theme_digest}".encode()
     )
     return digest.hexdigest()[:16]
 
@@ -154,7 +164,13 @@ def publish_project(
     store: Store,
     workdir: Path,
     scanner: Scanner | None = None,
+    *,
+    theme: ResolvedTheme | None = None,
 ) -> ProjectResult:
+    if theme is None:
+        theme = resolve_theme(
+            manifest.site.theme, monorepo, branch=manifest.site.branch
+        )
     if project.approved is None:
         return ProjectResult(project.name, "skipped", reason="not approved")
     site = manifest.site
@@ -171,7 +187,7 @@ def publish_project(
             repo, tip, state.tip, project.approved, project.allow_rewrite_of
         )
         current = _read_json(store, f"{prefix}/current")
-        build = build_id(tip, project.description, site.base_url)
+        build = build_id(tip, project.description, site.base_url, theme.digest)
         # Validate paths even for an existing build produced by an older
         # publisher, and before any uploads or pointer changes.
         entries = read_tree(repo, tip)
@@ -179,7 +195,7 @@ def publish_project(
         info = ProjectInfo(
             project.name, project.description, tip, site.base_url, updated
         )
-        rendered = render_project(info, entries)
+        rendered = render_project(info, entries, theme)
         if isinstance(store, LocalStore):
             store.validate_keys(f"{prefix}/site/{build}/{key}" for key in rendered)
         same_build = (
@@ -188,6 +204,7 @@ def publish_project(
         head_key = f"{prefix}/git/HEAD"
         missing_head = decision.action == "unchanged" and store.get(head_key) is None
         if same_build and not missing_head:
+            _upload_theme(store, site, theme)
             _sweep(store, prefix)
             return ProjectResult(project.name, "unchanged", tip, decision.reason)
 
@@ -206,6 +223,11 @@ def publish_project(
                     "Run partlet review to see them; accept a false positive in "
                     ".gitleaks.toml or .gitleaksignore",
                 )
+
+        # Theme assets are immutable and must exist before any page or live
+        # pointer can reference them. Validate their local key identities
+        # before writing Git objects as well as the theme resources.
+        _upload_theme(store, site, theme)
 
         # Refs may have moved before an interrupted first HEAD write. Repair
         # only that missing file, after scanning and without rewriting packs.
@@ -325,7 +347,47 @@ def check_checkout(
         raise CheckoutError("manifest changed while reading; run partlet publish again")
 
 
-def write_site_index(store: Store, site: Site) -> None:
+def _upload_theme(store: Store, site: Site, theme: ResolvedTheme) -> None:
+    prefix = f"{site.source}/static/themes/{theme.digest}/"
+    if isinstance(store, LocalStore):
+        store.validate_keys(prefix + resource.path for resource in theme.resources)
+    for resource in theme.resources:
+        store.put(prefix + resource.path, resource.data, resource.content_type)
+
+
+def _stored_theme(store: Store, source: str) -> ThemePresentation | None:
+    raw = store.get(f"{source}/site-theme.json")
+    if raw is None:
+        return None
+    try:
+        record = json.loads(raw)
+        if not isinstance(record, dict) or set(record) != {"name", "mode", "digest"}:
+            raise ValueError("invalid presentation fields")
+        name, mode, digest = (record[key] for key in ("name", "mode", "digest"))
+        if (
+            not isinstance(name, str)
+            or not NAME_RE.fullmatch(name)
+            or mode not in ("auto", "light", "dark")
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        ):
+            raise ValueError("invalid presentation values")
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise StoreError("invalid stored site theme; no index rebuilt") from exc
+    return ThemePresentation(name, mode, digest)
+
+
+def write_site_index(
+    store: Store, site: Site, theme: ResolvedTheme | None = None
+) -> None:
+    presentation = theme if theme is not None else _stored_theme(store, site.source)
+    if theme is not None:
+        _upload_theme(store, site, theme)
+    # Keep this route permanently Classic for cached legacy pages and the
+    # Worker's built-in 404, independent of the selected site theme.
+    store.put(
+        f"{site.source}/static/style.css", site_stylesheet(), "text/css; charset=utf-8"
+    )
     projects = []
     for name in store.list_dirs(f"{site.source}/p/"):
         try:
@@ -339,14 +401,20 @@ def write_site_index(store: Store, site: Site) -> None:
             # project's own publish reports the failure.
             continue
     projects.sort(key=lambda p: p["name"])
+    if theme is not None:
+        # Metadata must be durable before advertising the new index. If
+        # interrupted afterward, removal or retry can complete the selected
+        # presentation using resources already uploaded above.
+        _put_json(
+            store,
+            f"{site.source}/site-theme.json",
+            {"name": theme.name, "mode": theme.mode, "digest": theme.digest},
+        )
     _put_json(store, f"{site.source}/index.json", projects)
     store.put(
         f"{site.source}/index.html",
-        render_site_index(site.base_url, projects),
+        render_site_index(site.base_url, projects, presentation),
         "text/html; charset=utf-8",
-    )
-    store.put(
-        f"{site.source}/static/style.css", site_stylesheet(), "text/css; charset=utf-8"
     )
 
 
@@ -358,6 +426,9 @@ def unpublish_project(store: Store, site: Site, name: str) -> int:
     """
     if not NAME_RE.fullmatch(name) or name.endswith(".git"):
         raise ValueError(f"invalid project name {name!r}")
+    # Validate durable presentation before removing any live state. Theme
+    # source files may no longer exist locally during an explicit removal.
+    _stored_theme(store, site.source)
     prefix = f"{project_prefix(site.source, name)}/"
     keys = store.list(prefix)
     current = f"{prefix}current"
@@ -378,22 +449,30 @@ def publish_all(
     store: Store,
     workdir: Path,
     scanner: Scanner | None = None,
+    *,
+    theme: ResolvedTheme | None = None,
 ) -> list[ProjectResult]:
     """Publish every project in `manifest`; one project's failure does not stop the rest.
 
     `workdir` must be fresh: each project is exported to `<workdir>/<name>/export.git`,
     and an export refuses a destination that already exists.
     """
+    # Resolve once before project writes. All pages, the index, and their
+    # resource uploads use this same snapshot even if source files change.
+    if theme is None:
+        theme = resolve_theme(
+            manifest.site.theme, monorepo, branch=manifest.site.branch
+        )
     results = []
     for project in manifest.projects.values():
         try:
             result = publish_project(
-                monorepo, manifest, project, store, workdir, scanner
+                monorepo, manifest, project, store, workdir, scanner, theme=theme
             )
         except Exception as e:  # noqa: BLE001 - one project must not stop the rest
             result = ProjectResult(
                 project.name, "failed", reason=f"{type(e).__name__}: {e}"
             )
         results.append(result)
-    write_site_index(store, manifest.site)
+    write_site_index(store, manifest.site, theme)
     return results

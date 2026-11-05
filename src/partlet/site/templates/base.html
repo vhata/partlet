@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if theme %} data-theme="{{ theme.name }}" data-mode="{{ theme.mode }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{% endblock %}</title>
-<link rel="stylesheet" href="/_partlet/style.css">
+<link rel="stylesheet" href="{{ theme.stylesheet_url if theme else '/_partlet/style.css' }}">
 </head>
 <body>
 <header class="top"><a href="/">Partlet</a></header>

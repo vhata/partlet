@@ -166,6 +166,8 @@ that copy too. If a macOS clone hangs, see
 
 ## More documentation
 
+- [Site themes](docs/THEMES.md): choose Classic, Paper or Terminal, or
+  install a third-party CSS theme in your source repository.
 - [Publish your first site](docs/GETTING_STARTED.md): Cloudflare and
   GitHub setup, then first-clone verification.
 - [Installation and upgrades](docs/INSTALLATION.md): installed tools,

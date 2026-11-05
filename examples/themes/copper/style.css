@@ -1,0 +1,35 @@
+/* Copper 1.0.0: an example publisher-reviewed Partlet theme. */
+:root {
+  --fg: #30251f;
+  --muted: #6e5848;
+  --bg: #fffaf5;
+  --line: #dbcab9;
+  --link: #88411d;
+  --code-bg: #f4e8dc;
+  --focus: #88411d;
+  --syntax-keyword: #7745cf;
+  --prose-font: ui-serif, Georgia, serif;
+  --content-width: 960px;
+  --space: 20px;
+  --radius: 4px;
+}
+:root[data-mode="dark"] {
+  --fg: #f7ebdf;
+  --muted: #c2ac99;
+  --bg: #211b17;
+  --line: #625142;
+  --link: #f6ad77;
+  --code-bg: #30271f;
+  --focus: #f6ad77;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-mode="auto"] {
+    --fg: #f7ebdf;
+    --muted: #c2ac99;
+    --bg: #211b17;
+    --line: #625142;
+    --link: #f6ad77;
+    --code-bg: #30271f;
+    --focus: #f6ad77;
+  }
+}

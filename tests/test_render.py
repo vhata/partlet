@@ -1,9 +1,11 @@
+from partlet.manifest import ThemeConfig
 from partlet.site.render import (
     ProjectInfo,
     render_project,
     render_site_index,
     site_stylesheet,
 )
+from partlet.site.themes import resolve_theme
 from partlet.site.tree import SIZE_CAP, FileEntry
 from partlet.store import LocalStore
 
@@ -184,3 +186,45 @@ def test_site_index_lists_projects():
 
 def test_stylesheet_includes_pygments():
     assert b".hl" in site_stylesheet()
+
+
+def test_theme_applies_to_every_rendered_page_and_site_index():
+    theme = resolve_theme(ThemeConfig(name="paper", mode="dark"))
+    pages = render_project(
+        INFO,
+        [
+            FileEntry("README.md", b"# Read me\n"),
+            FileEntry("src/example.py", b"print('hello')\n"),
+        ],
+        theme,
+    )
+    index = render_site_index(
+        INFO.base_url,
+        [
+            {
+                "name": INFO.name,
+                "description": INFO.description,
+                "tip": INFO.tip,
+                "updated": INFO.updated,
+            }
+        ],
+        theme,
+    )
+    # Index timestamps need a wrapping hook, not the nowrap file-size hook.
+    assert b'class="listing projects"' in index
+    assert f'class="updated">{INFO.updated}'.encode() in index
+    assert b'class="size"' not in index
+    for data in [
+        index,
+        *(data for path, data in pages.items() if not path.startswith("raw/")),
+    ]:
+        assert f'href="{theme.stylesheet_url}"'.encode() in data
+        assert b'data-theme="paper" data-mode="dark"' in data
+        assert b"/_partlet/style.css" not in data
+        assert b"<script" not in data
+    assert pages["raw/src/example.py"] == b"print('hello')\n"
+
+
+def test_legacy_renderer_keeps_legacy_stylesheet():
+    assert b'href="/_partlet/style.css"' in render_site_index(INFO.base_url, [])
+    assert b"data-mode=" not in render_site_index(INFO.base_url, [])
