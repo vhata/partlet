@@ -31,6 +31,7 @@ from partlet.publish import (
 )
 from partlet.review import ReviewError, fetch_published_tip, run_review
 from partlet.scan import ScanError, Scanner
+from partlet.site.themes import BUILTIN_THEMES, ResolvedTheme, ThemeError, resolve_theme
 from partlet.store import LocalStore, R2Config, R2Store, Store, StoreError
 from partlet.summary import summary_markdown, write_summary
 from partlet.tools import ToolError, check_tools
@@ -174,6 +175,39 @@ def _parser() -> argparse.ArgumentParser:
     )
     _repo_args(publish)
     _summary_arg(publish)
+
+    theme = _command(
+        sub,
+        "theme",
+        "choose and validate site presentation",
+        "Choose a bundled theme or a reviewed vendored theme in partlet.toml. "
+        "List available themes or validate the configured theme locally; "
+        "nothing is uploaded and no cloud credentials are needed.",
+        "  partlet theme list\n"
+        "  partlet theme check --repo /path/to/source\n"
+        "\nUse 'partlet theme COMMAND --help' for options and examples.",
+    )
+    theme_sub = theme.add_subparsers(
+        dest="theme_command", title="commands", metavar="COMMAND", required=True
+    )
+    _command(
+        theme_sub,
+        "list",
+        "list bundled site themes and supported modes",
+        "List the bundled Classic, Paper and Terminal themes and their "
+        "automatic, light and dark modes. No source checkout is required.",
+        "  partlet theme list",
+    )
+    theme_check = _command(
+        theme_sub,
+        "check",
+        "validate the configured theme without publishing",
+        "Validate the theme selected in partlet.toml and report its content "
+        "fingerprint. Vendored files are read from the configured publishing "
+        "branch's committed snapshot; local theme edits are not included.",
+        "  partlet theme check\n  partlet theme check --repo /path/to/source",
+    )
+    _repo_args(theme_check)
 
     worker = _command(
         sub,
@@ -378,13 +412,16 @@ def _publish_into(
     versions: dict[str, str],
     summary: Path | None,
     title: str,
+    theme: ResolvedTheme,
 ) -> int:
     try:
         with (
             store_lock(store, manifest.site.source, describe_holder()),
             tempfile.TemporaryDirectory(prefix="partlet-") as tmp,
         ):
-            results = publish_all(repo, manifest, store, Path(tmp), scanner)
+            results = publish_all(
+                repo, manifest, store, Path(tmp), scanner, theme=theme
+            )
     except (LockError, StoreError, OSError) as e:
         print(f"partlet: {e}", file=sys.stderr)
         _save_summary(summary, summary_markdown(title, [], versions, error=str(e)))
@@ -409,9 +446,16 @@ def _build(args: argparse.Namespace) -> int:
     _forget_r2_keys()
     repo = args.repo.resolve()
     try:
-        manifest = load_manifest(_manifest_path(args))
+        manifest_path = _manifest_path(args)
+        manifest = load_manifest(manifest_path)
+        theme = resolve_theme(
+            manifest.site.theme,
+            repo,
+            branch=manifest.site.branch,
+            manifest_path=manifest_path,
+        )
         tools = check_tools(gitleaks=args.scan)
-    except (ManifestError, ToolError, OSError, UnicodeError) as e:
+    except (ManifestError, ThemeError, ToolError, OSError, UnicodeError) as e:
         return _error(e)
     scanner = Scanner(tools.gitleaks, repo) if tools.gitleaks else None
     return _publish_into(
@@ -422,6 +466,7 @@ def _build(args: argparse.Namespace) -> int:
         tools.versions,
         args.summary,
         "Partlet build",
+        theme,
     )
 
 
@@ -436,12 +481,20 @@ def _publish(args: argparse.Namespace) -> int:
         check_checkout(
             repo, manifest.site.branch, manifest_path, expected_manifest=manifest
         )
+        theme = resolve_theme(
+            manifest.site.theme,
+            repo,
+            branch=manifest.site.branch,
+            manifest_path=manifest_path,
+            require_clean=True,
+        )
         tools = check_tools(gitleaks=True)
         store = R2Store(config)
     except (
         StoreError,
         ManifestError,
         CheckoutError,
+        ThemeError,
         ToolError,
         OSError,
         UnicodeError,
@@ -455,6 +508,7 @@ def _publish(args: argparse.Namespace) -> int:
         tools.versions,
         args.summary,
         "Partlet publish",
+        theme,
     )
 
 
@@ -607,9 +661,42 @@ def _worker(args: argparse.Namespace) -> int:
         return _error(exc)
 
 
+def _theme(args: argparse.Namespace) -> int:
+    _forget_r2_keys()
+    if args.theme_command == "list":
+        for name, description in BUILTIN_THEMES.items():
+            print(f"{name:12} {description}")
+        print("Modes: auto (browser preference), light, dark")
+        return 0
+    repo = args.repo.resolve()
+    manifest_path = _manifest_path(args)
+    try:
+        manifest = load_manifest(manifest_path)
+        theme = resolve_theme(
+            manifest.site.theme,
+            repo,
+            branch=manifest.site.branch,
+            manifest_path=manifest_path,
+        )
+    except (ManifestError, ThemeError, OSError, UnicodeError) as exc:
+        return _error(exc)
+    print(f"Theme: {theme.name}; mode: {theme.mode}")
+    print(f"Fingerprint: {theme.digest}")
+    if manifest.site.theme.path is not None:
+        print(
+            f"Theme files: committed snapshot of refs/heads/{manifest.site.branch}; "
+            "local file edits are not included"
+        )
+    else:
+        print("Theme files: bundled with this Partlet installation")
+    print(f"Public resources: {len(theme.resources)}")
+    return 0
+
+
 COMMANDS = {
     "setup": _setup,
     "worker": _worker,
+    "theme": _theme,
     "build": _build,
     "publish": _publish,
     "unpublish": _unpublish,

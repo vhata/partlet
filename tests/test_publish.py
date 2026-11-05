@@ -289,13 +289,13 @@ def test_legacy_directory_layout_is_rerendered(mono, tmp_path, monkeypatch):
     from partlet import publish
     from partlet.site.render import render_project
 
-    def legacy_build_id(tip, description, base_url):
+    def legacy_build_id(tip, description, base_url, theme_digest=None):
         digest = hashlib.sha256(
             f"{tip}\0{description}\0{base_url}\0{__version__}".encode()
         )
         return digest.hexdigest()[:16]
 
-    def legacy_render(info, entries):
+    def legacy_render(info, entries, theme=None):
         return {
             key.replace("/children/", "/") if key.startswith("tree/") else key: data
             for key, data in render_project(info, entries).items()

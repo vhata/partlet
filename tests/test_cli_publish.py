@@ -254,7 +254,7 @@ import signal
 import sys
 from pathlib import Path
 from partlet import cli
-def waiting(*args):
+def waiting(*args, **kwargs):
     Path(sys.argv[3]).write_text("ready")
     while True:
         signal.pause()
