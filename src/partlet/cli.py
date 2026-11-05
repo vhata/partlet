@@ -10,6 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from partlet import __version__
 from partlet.export import ExportError
 from partlet.gitutil import GitError
 from partlet.lock import LockError, describe_holder, lock_key, read_lock, store_lock
@@ -59,7 +60,51 @@ def _summary_arg(parser: argparse.ArgumentParser) -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="partlet")
+    parser.add_argument("--version", action="version", version=f"partlet {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    setup = sub.add_parser("setup", help="install Partlet's pinned external tools")
+    setup.add_argument(
+        "--worker", action="store_true", help="also install the Worker deployment tools"
+    )
+
+    worker = sub.add_parser(
+        "worker", help="configure and run the installed public Worker"
+    )
+    worker_sub = worker.add_subparsers(dest="worker_command", required=True)
+    init = worker_sub.add_parser(
+        "init", help="create a separate deployment configuration"
+    )
+    init.add_argument("directory", type=Path)
+    init.add_argument("--name", default="partlet", help="Cloudflare Worker name")
+    init.add_argument("--source", default="replace-me", help="manifest site.source")
+    init.add_argument("--bucket", default="replace-me", help="existing R2 bucket name")
+    init.add_argument(
+        "--domain", default="partlet.replace-me.example", help="custom domain"
+    )
+    init.add_argument("--account-id", help="Cloudflare account ID")
+    worker_sub.add_parser("login", help="log in to Cloudflare with Wrangler")
+    worker_sub.add_parser("whoami", help="show Wrangler's authenticated account")
+    deploy = worker_sub.add_parser("deploy", help="deploy the configured Worker")
+    deploy.add_argument("--config", type=Path, required=True, help="your wrangler.toml")
+    deploy.add_argument(
+        "--dry-run", action="store_true", help="bundle locally without deploying"
+    )
+    deploy.add_argument(
+        "--yes", action="store_true", help="confirm the billable deployment"
+    )
+    preview = worker_sub.add_parser(
+        "preview", help="serve publisher output with local simulated R2"
+    )
+    preview.add_argument(
+        "--config", type=Path, required=True, help="your wrangler.toml"
+    )
+    preview.add_argument(
+        "--out", type=Path, required=True, help="partlet build output directory"
+    )
+    preview.add_argument(
+        "--port", type=int, default=8787, help="localhost port (default: 8787)"
+    )
 
     build = sub.add_parser(
         "build", help="publish every approved project into a local directory"
@@ -348,7 +393,31 @@ def _exit_on_sigterm(signum, frame):
     raise SystemExit(128 + signum)
 
 
+def _setup(args: argparse.Namespace) -> int:
+    from partlet import runtime
+
+    try:
+        runtime.setup(worker=args.worker)
+        return 0
+    except (runtime.SetupError, OSError) as exc:
+        return _error(exc)
+
+
+def _worker(args: argparse.Namespace) -> int:
+    from partlet.worker import WorkerError, run_worker
+
+    try:
+        return run_worker(args, confirm=_confirm)
+    except KeyboardInterrupt:
+        print("Worker command stopped.", file=sys.stderr)
+        return 130
+    except (WorkerError, OSError, UnicodeError) as exc:
+        return _error(exc)
+
+
 COMMANDS = {
+    "setup": _setup,
+    "worker": _worker,
     "build": _build,
     "publish": _publish,
     "unpublish": _unpublish,
