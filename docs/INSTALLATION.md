@@ -52,8 +52,14 @@ partlet setup --worker
 
 Use `partlet setup` instead of `partlet setup --worker` for publisher
 tools only. uv manages the Python application; explicit setup prepares
-Partlet's additional tools. Normal review, build and Worker commands do
-not download missing dependencies automatically.
+Partlet's additional tools. Normal review, preview, build and Worker
+commands do not download missing dependencies automatically.
+
+To browse a source repository without setting up hosting, run
+`partlet preview --repo /absolute/path/to/source` after
+`partlet setup --worker`. Open `http://127.0.0.1:8787/`; no deployment
+directory or approval is required. See the
+[local preview guide](../worker/README.md#preview-your-site).
 
 ## From a wheel
 

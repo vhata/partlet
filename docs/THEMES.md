@@ -92,7 +92,7 @@ No runtime theme download occurs. An updated theme takes effect when you
 commit its contents and publish again.
 
 For a local preview, follow the
-[Worker preview instructions](../worker/README.md#preview-local-publisher-output).
+[site preview instructions](../worker/README.md#preview-your-site).
 Inspect both color modes, a narrow screen, README links, source line
 numbers and keyboard focus before using a third-party theme publicly.
 

@@ -200,6 +200,12 @@ headers and bytes; actual browser execution and real private data are
 user-run proof. JavaScript modules (`.mjs`) are tracked for local R2
 tooling.
 
+The end-to-end suite also starts `partlet preview` against an unapproved
+synthetic project using an isolated managed runtime assembled from the
+installed development tools. It verifies pages, theme resources, raw
+files, archives and an actual Git clone through the local Worker, plus
+server termination and temporary-output cleanup on Ctrl-C and SIGTERM.
+
 ## Scheduled validation of main
 
 Deferred until there is code worth an extended run; see the Docket
