@@ -1,0 +1,12 @@
+/* Pygments markup stays renderer-owned; every color is a theme token. */
+.hl .hll { background-color: var(--line); }
+.hl :is(.c, .ch, .cm, .cp, .cpf, .c1, .cs) { color: var(--syntax-comment); font-style: italic; }
+.hl :is(.k, .kc, .kd, .kn, .kp, .kr, .kt, .ow) { color: var(--syntax-keyword); }
+.hl :is(.s, .sa, .sb, .sc, .dl, .sd, .s2, .se, .sh, .si, .sx, .sr, .s1, .ss) { color: var(--syntax-string); }
+.hl :is(.m, .mb, .mf, .mh, .mi, .il, .mo) { color: var(--syntax-number); }
+.hl :is(.na, .nb, .bp, .nc, .nd, .ne, .nf, .fm, .nn, .nt, .nv, .vc, .vg, .vi, .vm) { color: var(--syntax-name); }
+.hl :is(.err, .gr, .gt, .gd) { color: var(--syntax-error); }
+.hl .gi { color: var(--syntax-string); }
+.hl .ge { font-style: italic; }
+.hl .gs { font-weight: bold; }
+.hl :is(.gh, .gu) { color: var(--syntax-name); font-weight: bold; }

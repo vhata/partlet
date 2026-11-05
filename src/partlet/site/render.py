@@ -13,6 +13,7 @@ from partlet.site import urls
 from partlet.site.highlight import highlight_file, pygments_css
 from partlet.site.links import Linker
 from partlet.site.markdown import render_markdown
+from partlet.site.themes import ThemePresentation
 from partlet.site.tree import FileEntry, is_viewable
 
 README_NAMES = ("readme.md", "readme.markdown", "readme", "readme.txt", "readme.rst")
@@ -79,7 +80,11 @@ def _readme_html(files: list[FileEntry], directory: str, linker: Linker) -> str 
     return None
 
 
-def render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, bytes]:
+def render_project(
+    info: ProjectInfo,
+    entries: list[FileEntry],
+    theme: ThemePresentation | None = None,
+) -> dict[str, bytes]:
     out: dict[str, bytes] = {}
     dirs = _directories(entries)
     linker = Linker(info.name, {e.path for e in entries}, set(dirs))
@@ -89,6 +94,7 @@ def render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, byt
 
     for directory, (subdirs, files) in dirs.items():
         html = tree_tpl.render(
+            theme=theme,
             project=info,
             directory=directory,
             crumbs=_crumbs(info.name, directory),
@@ -118,6 +124,7 @@ def render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, byt
             else None
         )
         html = blob_tpl.render(
+            theme=theme,
             project=info,
             path=entry.path,
             name=entry.name,
@@ -134,11 +141,13 @@ def render_project(info: ProjectInfo, entries: list[FileEntry]) -> dict[str, byt
     return out
 
 
-def render_site_index(base_url: str, projects: list[dict]) -> bytes:
+def render_site_index(
+    base_url: str, projects: list[dict], theme: ThemePresentation | None = None
+) -> bytes:
     ordered = sorted(projects, key=lambda p: p["name"])
     return (
         _env.get_template("index.html")
-        .render(base_url=base_url, projects=ordered)
+        .render(base_url=base_url, projects=ordered, theme=theme)
         .encode("utf-8")
     )
 

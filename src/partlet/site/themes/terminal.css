@@ -1,0 +1,57 @@
+/* Terminal: monochrome typography with a green accent. */
+:root {
+  --fg: #21382c;
+  --muted: #486554;
+  --bg: #f5fbf5;
+  --line: #b7cdbb;
+  --link: #176239;
+  --code-bg: #eaf3e9;
+  --focus: #176239;
+  --body-font: var(--mono-font);
+  --prose-font: var(--mono-font);
+  --font-size: 14px;
+  --line-height: 1.65;
+  --content-width: 1080px;
+  --space: 20px;
+  --radius: 0px;
+  --syntax-comment: #486554;
+  --syntax-keyword: #6f4190;
+  --syntax-string: #176239;
+  --syntax-number: #874521;
+  --syntax-name: #245a82;
+  --syntax-error: #a92e36;
+}
+:root[data-mode="dark"] {
+  --fg: #d5edda;
+  --muted: #9cbaa4;
+  --bg: #101b14;
+  --line: #334f3b;
+  --link: #8de0a6;
+  --code-bg: #18271d;
+  --focus: #8de0a6;
+  --syntax-comment: #9cbaa4;
+  --syntax-keyword: #cbb0ea;
+  --syntax-string: #8de0a6;
+  --syntax-number: #efbc8d;
+  --syntax-name: #9accef;
+  --syntax-error: #ffadb0;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-mode="auto"] {
+    --fg: #d5edda;
+    --muted: #9cbaa4;
+    --bg: #101b14;
+    --line: #334f3b;
+    --link: #8de0a6;
+    --code-bg: #18271d;
+    --focus: #8de0a6;
+    --syntax-comment: #9cbaa4;
+    --syntax-keyword: #cbb0ea;
+    --syntax-string: #8de0a6;
+    --syntax-number: #efbc8d;
+    --syntax-name: #9accef;
+    --syntax-error: #ffadb0;
+  }
+}
+header.top { letter-spacing: .04em; text-transform: uppercase; }
+article.readme h1::before, article.readme h2::before { content: "# "; color: var(--muted); }

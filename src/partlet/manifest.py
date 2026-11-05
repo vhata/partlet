@@ -7,19 +7,28 @@ import re
 import stat
 import tempfile
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]*")
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 
-SITE_KEYS = {"source", "branch", "base_url", "mailmap"}
+SITE_KEYS = {"source", "branch", "base_url", "mailmap", "theme"}
 PROJECT_KEYS = {"path", "previous_paths", "description", "approved", "allow_rewrite_of"}
+THEME_NAMES = ("classic", "paper", "terminal")
+THEME_MODES = ("auto", "light", "dark")
 
 
 class ManifestError(Exception):
     """partlet.toml is missing, malformed, or fails validation."""
+
+
+@dataclass(frozen=True)
+class ThemeConfig:
+    name: str | None = "classic"
+    path: str | None = None
+    mode: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -28,6 +37,7 @@ class Site:
     branch: str
     base_url: str
     mailmap: str | None = None
+    theme: ThemeConfig = field(default_factory=ThemeConfig)
 
 
 @dataclass(frozen=True)
@@ -179,7 +189,34 @@ def _parse_site(raw: Any) -> Site:
         branch=_str(raw, "branch", "site", "main"),
         base_url=base_url.rstrip("/"),
         mailmap=_str(raw, "mailmap", "site"),
+        theme=_parse_theme(raw.get("theme", {})),
     )
+
+
+def _parse_theme(raw: Any) -> ThemeConfig:
+    where = "site.theme"
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where} must be a table")
+    _check_keys(raw, {"name", "path", "mode"}, where)
+    if "name" in raw and "path" in raw:
+        raise ManifestError(f"{where}: name and path are mutually exclusive")
+    name = _str(raw, "name", where, None if "path" in raw else "classic")
+    path = _str(raw, "path", where)
+    mode = _str(raw, "mode", where, "auto")
+    if name is not None and name not in THEME_NAMES:
+        raise ManifestError(f"{where}.name must be one of {', '.join(THEME_NAMES)}")
+    if mode not in THEME_MODES:
+        raise ManifestError(f"{where}.mode must be one of {', '.join(THEME_MODES)}")
+    # Unlike historical project paths, theme paths cannot start with /.
+    if path is not None and (
+        not path
+        or any(part in ("", ".", "..") for part in path.split("/"))
+        or any(char in path for char in "\\:\0")
+    ):
+        raise ManifestError(
+            f"{where}.path must be a relative directory without traversal"
+        )
+    return ThemeConfig(name=name, path=path, mode=mode)
 
 
 def _parse_project(name: str, raw: Any) -> Project:
