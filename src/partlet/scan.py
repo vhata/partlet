@@ -33,15 +33,19 @@ class Finding:
 
 
 def find_gitleaks() -> str:
-    """Prefer Partlet's managed scanner, then the development venv and PATH."""
+    """Prefer the interpreter's own scanner, then Partlet's cache and PATH.
+
+    The Action verifies and installs its own scanner beside its isolated
+    Python. Ambient user data must not replace that trusted executable.
+    """
+    beside = Path(sys.executable).parent / "gitleaks"
+    if beside.is_file():
+        return str(beside)
     from partlet.runtime import managed_gitleaks
 
     managed = managed_gitleaks()
     if managed.is_file():
         return str(managed)
-    beside = Path(sys.executable).parent / "gitleaks"
-    if beside.is_file():
-        return str(beside)
     found = shutil.which("gitleaks")
     if found is None:
         raise ScanError(

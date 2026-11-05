@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from partlet import runtime
-from partlet.scan import GITLEAKS_VERSION, find_gitleaks
+from partlet import scan as scan_module
+from partlet.scan import GITLEAKS_VERSION, ScanError, check_gitleaks, find_gitleaks
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -180,6 +181,9 @@ def test_setup_missing_node_is_actionable(isolated, monkeypatch):
 def test_scanner_install_is_verified_then_atomically_published(isolated, monkeypatch):
     calls = []
     monkeypatch.setenv("PARTLET_R2_SECRET_ACCESS_KEY", "must-not-reach-version-probe")
+    monkeypatch.setattr(
+        scan_module.sys, "executable", str(isolated / "python/bin/python")
+    )
 
     def install(command, **kwargs):
         calls.append(command)
@@ -198,6 +202,46 @@ def test_scanner_install_is_verified_then_atomically_published(isolated, monkeyp
     executable(runtime.managed_gitleaks(), "echo wrong-version")
     runtime.setup()
     assert len(calls) == 2
+
+
+def test_scanner_beside_interpreter_wins_over_managed_and_path(isolated, monkeypatch):
+    python = isolated / "action/bin/python"
+    own = python.parent / "gitleaks"
+    monkeypatch.setattr(scan_module.sys, "executable", str(python))
+    executable(own, f"echo {GITLEAKS_VERSION}")
+    touched = isolated / "ambient-scanner-executed"
+    executable(
+        runtime.managed_gitleaks(), f"touch '{touched}'\necho {GITLEAKS_VERSION}"
+    )
+    path_bin = isolated / "path"
+    executable(path_bin / "gitleaks", "exit 99")
+    monkeypatch.setenv("PATH", str(path_bin))
+    assert find_gitleaks() == str(own)
+    assert check_gitleaks() == str(own)
+    assert not touched.exists()
+
+
+def test_wrong_interpreter_scanner_fails_closed(isolated, monkeypatch):
+    python = isolated / "action/bin/python"
+    monkeypatch.setattr(scan_module.sys, "executable", str(python))
+    executable(python.parent / "gitleaks", "echo wrong-version")
+    executable(runtime.managed_gitleaks(), f"echo {GITLEAKS_VERSION}")
+    with pytest.raises(ScanError, match="needs gitleaks"):
+        check_gitleaks()
+
+
+def test_managed_scanner_wins_over_path_when_interpreter_has_none(
+    isolated, monkeypatch
+):
+    monkeypatch.setattr(
+        scan_module.sys, "executable", str(isolated / "python/bin/python")
+    )
+    executable(runtime.managed_gitleaks(), f"echo {GITLEAKS_VERSION}")
+    path_bin = isolated / "path"
+    executable(path_bin / "gitleaks", "exit 99")
+    monkeypatch.setenv("PATH", str(path_bin))
+    assert find_gitleaks() == str(runtime.managed_gitleaks())
+    assert check_gitleaks() == str(runtime.managed_gitleaks())
 
 
 def test_invalid_scanner_download_is_not_published(isolated, monkeypatch):
