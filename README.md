@@ -116,8 +116,7 @@ using [`previous_paths`](docs/PUBLISHING.md#manifest-reference).
 From the same terminal:
 
 ```bash
-partlet review foo --repo "$SOURCE_REPO" \
-  --published-tip none
+partlet review foo --repo "$SOURCE_REPO" --first-publish
 ```
 
 Read the report, including deleted files, identities, commit messages,
@@ -127,8 +126,8 @@ into your source repository's `partlet.toml`; leave that value to the
 tool. This command does not upload anything and needs no cloud keys.
 Repeat for any other projects you want to publish.
 
-Use `--published-tip none` only for a project's first publication. For
-an existing project, omit it so review checks the public site's history.
+Use `--first-publish` only for a project's first publication. For an
+existing project, omit it so review checks the public site's history.
 
 ### 4. Connect Cloudflare and enable publishing
 
@@ -138,6 +137,15 @@ adding GitHub secrets and the publishing workflow, committing the
 approval, and verifying your first public clone.
 
 ## Everyday use
+
+Run `partlet` for a command overview and examples, or add `--help` to
+any command for its options and examples:
+
+```bash
+partlet review --help
+partlet worker
+partlet worker preview --help
+```
 
 After setup, commit and push changes to your source repository's
 publishing branch as usual. Check its **Actions → Partlet** run and
