@@ -32,8 +32,8 @@ You review a project's exported history locally and approve its first
 publication. A GitHub Action in your private repository then exports the
 selected directories, scans their history for secrets, builds their web
 pages, and uploads the result to Cloudflare R2. A Cloudflare Worker
-serves those public files on your domain. The Worker has no access to
-your private repository.
+serves those public files at your public site address. The Worker has no
+access to your private repository.
 
 **After the first publication, later fast-forward changes publish
 automatically when you push to the configured branch.** Approval is not
@@ -51,9 +51,9 @@ You need a private repository on GitHub with a full local clone, Git
 2.31 or newer, and
 [uv](https://docs.astral.sh/uv/getting-started/installation/). The local
 commands below support macOS and Linux. Hosting also needs a Cloudflare
-account with R2 enabled, a domain managed by Cloudflare, and Node/npm;
-those steps follow in the hosting guide. R2 and Workers are billable
-services.
+account with R2 enabled and Node/npm. You can use a default
+`workers.dev` address or your own domain managed by Cloudflare; those
+steps follow in the hosting guide. R2 and Workers are billable services.
 
 ### 1. Install Partlet in a separate checkout
 
@@ -90,10 +90,13 @@ path = "tools/foo"
 description = "Foo command-line tool"
 ```
 
-Replace the URL and project path with your own. `foo` becomes the public
-URL name; `source` is a stable internal storage name for your monorepo.
-Use lowercase names without spaces. Add another `[projects.NAME]` table
-for each additional project.
+Replace the URL and project path with your own. The hosting guide
+explains how to
+[choose your public address](docs/GETTING_STARTED.md#2-create-storage-and-deploy-the-public-site),
+including a `workers.dev` address if you do not own a domain. `foo`
+becomes the public URL name; `source` is a stable internal storage name
+for your monorepo. Use lowercase names without spaces. Add another
+`[projects.NAME]` table for each additional project.
 
 The selected directory must already be committed on the local `main`
 branch (or the branch you set above). Partlet reads that branch's
