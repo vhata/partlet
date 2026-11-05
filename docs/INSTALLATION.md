@@ -82,6 +82,11 @@ partlet worker init "$HOME/partlet-sites/work" \
   --bucket work-public --domain code.work.example
 ```
 
+If you do not own a domain, replace `--domain HOSTNAME` with
+`--workers-dev`. The generated config enables Cloudflare's default
+address and has no custom-domain route. See the
+[public address options](GETTING_STARTED.md#2-create-storage-and-deploy-the-public-site).
+
 `init` writes `wrangler.toml` and a `.gitignore` for local state. It
 does not create cloud resources. It refuses to replace an existing
 configuration. You can omit options and edit the generated placeholders;
@@ -89,9 +94,9 @@ deployment refuses placeholders. Set `account_id` or pass `--account-id`
 when you need to select a specific Cloudflare account.
 
 Each source name must match its source repository's `site.source`. Each
-hostname must match that repository's `base_url`. Choose distinct Worker
-names and domains for independent deployments. Keep bucket and source
-prefixes separate when you need independent publication data.
+public address must match that repository's `base_url`. Choose distinct
+Worker names and addresses for independent deployments. Keep bucket and
+source prefixes separate when you need independent publication data.
 
 Select the configuration explicitly, from any working directory:
 
@@ -103,8 +108,9 @@ partlet worker deploy \
 Partlet supplies the installed Worker entry point. The config does not
 need a `main` path, installation path or checkout path. The supported
 configuration describes a single Worker with a `SOURCE` variable, one
-`BUCKET` R2 binding, and custom-domain routes. Arbitrary build hooks,
-extra bindings and Wrangler environments are outside this interface.
+`BUCKET` R2 binding, and custom-domain routes or a `workers.dev`
+address. Arbitrary build hooks, extra bindings and Wrangler environments
+are outside this interface.
 
 You may track these configuration directories in your own repository.
 Keep access tokens and R2 write keys out of them. Cloudflare login and
@@ -119,6 +125,8 @@ Partlet stores downloaded tools below its user-data directory:
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/partlet`.
 - Either platform: set `PARTLET_DATA_DIR` to an explicit directory to
   isolate an installation, including for CI or testing.
+
+`XDG_DATA_HOME` also overrides the default on macOS.
 
 Use the same override for setup and subsequent commands. The directory
 contains installed tools, not your deployment configs or approvals.

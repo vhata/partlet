@@ -20,6 +20,8 @@ and the pinned setup inputs needed after that checkout is removed.
 - `partlet.toml` remains in the source repository. Each deployment has a
   separate user-owned `wrangler.toml`, created by
   `partlet worker init DIRECTORY`. Reinitializing cannot overwrite it.
+- Support both custom-domain routes and Cloudflare's default
+  `workers.dev` address without requiring ownership of a domain.
 - Worker commands require an explicit config path. Partlet supplies the
   installed Worker entry point; user configuration does not depend on a
   checkout or a particular installation path.

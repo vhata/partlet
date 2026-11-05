@@ -11,7 +11,7 @@ complete.
 | Decision | Reason and trade-off |
 | -- | -- |
 | Package the existing Worker sources, npm lockfile, local seeder and checksum-pinned scanner installer with the Python application. Explicit setup prepares tools in per-user storage, keyed by Worker inputs; normal commands never download tools. | An installed application must work after its source checkout is removed. Reusing the authoritative sources and pins avoids a second release toolchain. Cost: Worker setup currently installs the same npm dependencies as development, and uv and Node/npm remain external prerequisites. |
-| Keep deployment configuration in user-owned directories and supply the installed Worker entry point at invocation time. Validate the supported config and run Wrangler with a temporary effective configuration. | Upgrades cannot rewrite deployment settings or leave them pointing to a removed installation. Multiple sites select their config explicitly. Temporary effective configs avoid loading unrelated build hooks or dotenv files. Cost: the wrapper intentionally supports a single SOURCE, BUCKET and custom-domain configuration rather than every Wrangler feature. |
+| Keep deployment configuration in user-owned directories and supply the installed Worker entry point at invocation time. Validate the supported config and run Wrangler with a temporary effective configuration. | Upgrades cannot rewrite deployment settings or leave them pointing to a removed installation. Multiple sites select their config explicitly. Temporary effective configs avoid loading unrelated build hooks or dotenv files. Cost: the wrapper intentionally supports a single SOURCE and BUCKET with custom domains or workers.dev rather than every Wrangler feature. |
 
 ## 2026-11-02
 
