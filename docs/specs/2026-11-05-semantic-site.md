@@ -1,8 +1,11 @@
 # Semantic site output and page models
 
-Status: accepted direction; implementation queued. The current supported
-theme contract remains [Site themes](../THEMES.md). Implementation order
-and checks are in the [plan](../../plans/2026-11-05-semantic-site.md).
+Status: accepted direction; implementation queued. There are no current
+users, so this design establishes a new semantic baseline without a
+backwards-compatibility requirement. [Site themes](../THEMES.md)
+documents today's code; its HTML and theme-format promises are replaced
+when this design ships. Implementation order and checks are in the
+[plan](../../plans/2026-11-05-semantic-site.md).
 
 ## Goal and scope
 
@@ -12,27 +15,40 @@ values alongside readable presentation so future themes can format
 dates, sort sizes, and choose layouts without parsing display strings or
 private publisher state.
 
-The first implementation defines a versioned page model and adds
-semantic markup to Partlet's existing templates. Theme format 1 remains
-CSS and declared images only. Custom templates, executable theme code,
-new public JSON routes, and a browser application require later designs.
-No Worker deployment, provisioning, or cloud settings change is part of
-this work.
+The first implementation defines a versioned page model, designs
+semantic HTML around that information, and reworks or replaces the
+themes to suit it. Existing tables, classes, CSS variables, visible
+formatting, theme names, and theme format 1 need not survive. Choose the
+structure that serves the new model instead of adapting it to the old
+presentation.
 
-## Current constraints
+Themes still supply CSS and declared images in this foundation. Custom
+templates, executable theme code, new public page-data routes, and a
+browser application require later designs. No Worker deployment,
+provisioning, or cloud settings change is part of this work.
+
+## New baseline
 
 The renderer currently passes directory and file tuples to Jinja,
 formats byte counts before rendering, truncates revisions in templates,
 and emits timestamps as bare text. The index and directory layouts use
-tables. A table is appropriate for tabular information; this design
-improves its meaning and access to values while preserving its existing
-styling hooks.
+tables. These implementation choices do not constrain the replacement.
+Use a table where the information is tabular, or semantic lists and
+articles where they better describe a collection. CSS controls layout.
 
-The [theme design](2026-11-04-site-themes.md) promises stable CSS tokens
-and hooks including `table.listing`. Those promises still apply. The
-Worker blocks scripts, and repository Markdown and raw files remain
-inert under the
-[quality contract](../QUALITY.md#what-quality-means-here).
+This design supersedes the old HTML-hook and compatibility promises in
+the [theme design](2026-11-04-site-themes.md). Rework the bundled themes
+and custom-theme example against the new output; keeping their names or
+appearance is optional. Update authoring docs, validation, preview,
+packaged assets, and Worker presentation routes together. No old-theme
+adapter, duplicate renderer, legacy route, or migration path is
+required.
+
+The new system still meets the
+[quality contract](../QUALITY.md#what-quality-means-here): repository
+Markdown and raw files remain inert, exported Git history stays stable,
+and ordinary clone and pull work. These are correctness requirements
+independent of the old presentation.
 
 ## Page-model contract, version 1
 
@@ -42,7 +58,8 @@ positional listing tuples, or source-repository objects. Keep
 construction separate from HTML rendering so future consumers can use
 the same information without depending on today's layout.
 
-Every page has `model_version = 1` and `kind = index | tree | blob`.
+Every page has `output_version = 1` and `kind = index | tree | blob`.
+This version covers the new page-model and semantic-HTML contract.
 Version 1 describes the following named records; an implementation may
 use frozen dataclasses and tuples. This is a documented rendering
 contract, not a new supported Python plugin API or a public JSON
@@ -58,16 +75,17 @@ serialization.
 | Tree page | Version, kind, project, project-relative `path` (empty string at root), breadcrumbs, ordered entries, and an optional rendered README slot. |
 | Blob page | Version, kind, project, entry, breadcrumbs, generated public `raw_url`, optional `symlink_target`, and a content state (`source`, `symlink`, or `unavailable`) with an optional highlighted-source slot. |
 
-Retain directory-first ordering and lexical name ordering within each
-group. Symlinks stay among file entries, with their kind recorded. Keep
-readable size and revision formatting as presentation helpers or derived
-properties; they never replace the original values. An unavailable
-source view retains the existing download link and explanation.
+Define deterministic ordering for projects and entries; the old order is
+not a compatibility promise. Record symlinks with their actual kind.
+Keep readable size and revision formatting as presentation helpers or
+derived properties; they never replace the original values. An
+unavailable source view provides a raw download link and a readable
+explanation.
 
 Rendered README and highlighted-source slots are explicitly
-distinguished from plain text. Their HTML producers remain the existing
-Markdown sanitizer, source highlighter, and autoescaped `pre` wrapper
-for plaintext READMEs. Descriptions, names, paths, timestamps, and
+distinguished from plain text. Only renderer-owned sanitized Markdown,
+highlighted source, and autoescaped `pre` wrappers for plaintext READMEs
+produce trusted HTML. Descriptions, names, paths, timestamps, and
 symlink targets remain escaped. HTML slots are presentation output and
 would need a separate decision in any future JSON representation. No
 arbitrary model string becomes trusted HTML.
@@ -86,72 +104,79 @@ arbitrary model string becomes trusted HTML.
   filesystem. Directory sizes are absent. Preserve current omission of
   submodules, which have no exported file content in the renderer.
 - Paths are relative to the exported project. URLs come from Partlet's
-  existing URL builders; never join unescaped path text into HTML links.
+  central URL builders; never join unescaped path text into HTML links.
 - Use an explicit field allowlist. Exclude source paths and identities,
   credentials, approvals, local filesystem locations, storage keys,
   locks, and build-management metadata. Do not serialize `current`
   records, configuration objects, or `FileEntry` wholesale.
-- Index construction must still work from the existing public fields in
-  durable project records. Unpublish must rebuild it without a local
-  source checkout or installed theme directory.
+- Index construction and unpublish must work from durable public project
+  and presentation records without a local source checkout or installed
+  theme directory. Their record schemas may be redesigned together;
+  decoding legacy records is not required.
 
 ### Versioning
 
-Model versions and theme format versions are independent. Adding an
-optional field with defined absence semantics is compatible. Removing or
-renaming a field, changing its type or meaning, or changing requiredness
-requires a new model version. Document additions and their fallback
-behavior. Keep versioning explicit before offering external consumers.
+Output versions and theme format versions are independent. Start the
+HTML/model contract at output version 1 and identify the rewritten theme
+contract as format 2. Support that new baseline; reject format-1 packs
+clearly before publication instead of introducing adapters. Update all
+shipped packs, metadata, examples, and author documentation together.
 
-Do not change the existing public `/_partlet/index.json` project-list
-shape or reinterpret it as this page model. It is an existing interface.
-Any later page-data endpoint needs its own serialization, compatibility,
-and publication-consistency design.
+After this baseline, adding an optional field with defined absence
+semantics is compatible. Removing or renaming a documented field or
+hook, changing its type or meaning, or changing requiredness requires a
+new output version. Breaking theme-contract changes require a new theme
+format. Document the supported combination and validate it explicitly.
+Versioning establishes future evolution; it does not require keeping
+multiple output versions or renderers active now.
+
+The old `/_partlet/index.json` route and project-list shape are not
+compatibility obligations. Retain, revise, or remove them according to
+the new implementation's actual needs, updating producers, consumers,
+routes, tests, and docs together. Do not expose the internal page model
+as a new JSON API without a consumer and a serialization and snapshot
+consistency design.
 
 ## Semantic HTML contract
 
 Keep navigation, clone instructions, downloads, READMEs, source views,
-and line anchors functional without scripts or theme CSS. Maintain
-readable default text, including the existing timestamp and size display
-unless a separate presentation change is justified.
+and line anchors functional without scripts or theme CSS. Choose
+readable default text and formatting appropriate to the new design. The
+old DOM and visual appearance do not constrain it.
 
 Add the following documented hooks and machine-readable values:
 
 | Location | Contract |
 | -- | -- |
-| Root `html` | `data-partlet-page` (`index`, `tree`, or `blob`) and `data-partlet-model-version="1"`, alongside existing theme and mode attributes. |
-| Project record region | `data-partlet-project` containing its public project name; one index row or the project page's `main` region. |
-| Project timestamp | `<time datetime="…">…</time>` inside the existing updated cell or tip paragraph. The attribute holds `updated_at`. |
-| Revision code | Existing abbreviated visible revision, with `data-partlet-revision` holding the complete exported revision. |
-| Listing row | `data-partlet-entry-kind` and `data-partlet-path` identifying the exported entry. |
-| File size | `<data value="1536">1.5 KiB</data>` inside the existing size cell or file-info region; `value` is the decimal byte count. |
+| Root `html` | `data-partlet-page` (`index`, `tree`, or `blob`) and `data-partlet-output-version="1"`; document the new theme-selection and color-mode hooks. |
+| Project record region | `data-partlet-project` containing its public project name, attached to the element grouping that project's information. |
+| Project timestamp | `<time datetime="…">…</time>`; the attribute holds `updated_at` and the text is a readable date. |
+| Revision code | A `code` element with `data-partlet-revision` holding the complete exported revision; its visible text may be abbreviated. |
+| Entry region | `data-partlet-entry-kind` and `data-partlet-path` on the element grouping that entry's information. |
+| File size | `<data value="1536">1.5 KiB</data>`; `value` is the decimal byte count, independent of the visible size format. |
 
 For example, a project timestamp remains ordinary useful content:
 
 ```html
-<td class="updated">
-  <time datetime="2026-11-05T09:00:00+00:00">
-    2026-11-05T09:00:00+00:00
-  </time>
-</td>
+<time datetime="2026-11-05T09:00:00+00:00">5 November 2026</time>
 ```
 
-Use table captions or accessible names, column headers with appropriate
-scope, and a labeled breadcrumb navigation region. Preserve existing
-classes and elements that format-1 themes rely on, including
-`header.top`, `main`, `.crumbs`, `table.listing`, `article.readme`,
-`.hl`, and `.hl .linenos`. Support narrow screens and keyboard
-navigation. Changes to header markup need corresponding default styling
-so existing themes remain usable.
+Use meaningful headings, a main landmark, and labeled breadcrumb
+navigation. If a listing uses a table, provide an accessible name and
+column headers with appropriate scope. If it uses lists or articles,
+express that hierarchy directly. Group names, descriptions, revisions,
+timestamps, file metadata, README content, and source lines so themes
+can target their meaning without depending on positional selectors.
+Document the new hooks and CSS tokens. Support narrow screens, keyboard
+focus, code scrolling, and addressable source lines.
 
-Only documented fields, attributes, tokens, and hooks are compatibility
-promises. Incidental whitespace and wrappers are not. Additive markup
-must still be checked against bundled themes and the Copper example;
-preserving class names alone does not establish visual compatibility.
+Only documented fields, attributes, tokens, and hooks in this new
+baseline become future compatibility promises. Incidental whitespace and
+wrappers are not. The semantic structure and data must remain useful
+without theme CSS; themes may arrange those regions differently.
 
-For malformed legacy timestamp values, emit escaped readable text and
-omit the `time` element rather than inventing a date or invalid
-`datetime`. Valid current publication timestamps retain their value.
+Validate timestamps when constructing the new model and report invalid
+inputs clearly. There is no legacy timestamp decoder or fallback path.
 
 ## Rendering and publication
 
@@ -164,15 +189,23 @@ Include an explicit renderer contract revision in project build identity
 when semantic output ships. Increment it for output changes that require
 regeneration. Unchanged Git history and theme inputs must still
 regenerate pages after this renderer upgrade; export hashes and history
-approval remain unaffected. Model compatibility version alone is
+approval remain unaffected. Output contract version alone is
 insufficient as a renderer cache key, because compatible markup changes
 also need builds.
 
-Keep immutable theme resources, current pointers, public routes,
-raw-file headers, and the existing index JSON shape compatible. Index
-rebuilding uses the same model constructor whether publishing or
-unpublishing, including selected theme recovery and legacy records.
-Cached older pages remain usable with their existing assets.
+Keep publication internally consistent: fingerprint theme resources and
+upload them before pages or live pointers reference them. Assets needed
+by currently live pages must remain available, including projects left
+unchanged after partial publication failures. That reference integrity
+is required within the new baseline; retaining obsolete release output
+solely for backwards compatibility is unnecessary.
+
+Index rebuilding uses the same model constructor when publishing and
+unpublishing, recovering presentation from durable records. Public
+presentation routes and record schemas may change together; keep raw
+files isolated and Git serving functional. Remove obsolete presentation
+paths rather than maintaining a parallel legacy system. No new storage
+garbage collector is required by this work.
 
 ## Future extensions
 
@@ -198,19 +231,24 @@ implementing this foundation.
 
 - Model-level checks verify raw values, provenance, absence semantics,
   deterministic ordering, symlinks, and the public field allowlist.
-- A parsed-HTML check verifies meaningful values and stable hooks across
-  index, root and nested directories, source, symlink, binary, and
-  oversized-file pages. Include Markdown and plaintext READMEs, unusual
-  names, escaping, and malformed legacy timestamps. Do not make
-  whitespace snapshots the contract.
-- Compare the existing index JSON interface before and after the change.
-  Exercise index rebuilding and unpublish from stored records without
-  the source checkout or theme files.
+- A parsed-HTML check verifies meaningful values and the new hooks
+  across index, root and nested directories, source, symlink, binary,
+  and oversized-file pages. Include Markdown and plaintext READMEs,
+  unusual names, escaping, and rejection of invalid model timestamps.
+  Verify the new contract rather than equality with old HTML or JSON.
+- Exercise index rebuilding and unpublish from the new durable records
+  without the source checkout or theme files. Check every retained or
+  changed presentation route against the new contract.
 - Verify renderer-only upgrades regenerate pages without changing
   exported commits or requiring renewed history approval. Cover local
   build, preview, and publication using synthetic repositories.
-- Inspect bundled themes and Copper in light and dark modes, at desktop
-  and narrow widths, including header changes, keyboard focus, README
-  links, and source line anchors. Save representative browser evidence.
+- Verify unsupported old theme packs fail clearly and every shipped
+  theme plus the rewritten custom example uses the new contract. Inspect
+  light and dark modes, desktop and narrow widths, keyboard focus,
+  README links, and source line anchors. Save representative browser
+  evidence. No screenshot parity with the old themes is required.
+- Exercise partial publication to show live pages retain their
+  referenced assets and do not mix incompatible output and theme
+  formats.
 - Run the repository's required checks. Local and simulated-store proof
   establishes neither a hosted deployment nor behavior on private data.
