@@ -42,6 +42,12 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 
 ### Unprioritized
 
+- [SITE] `semantic-site-markup` — **Design semantic HTML and rebuild themes around a new versioned output contract.** Give themes access to timestamps, complete exported revisions, byte counts, and entry kinds without constraints from the old tables, CSS hooks, or theme format.
+  - Source: site structure and sophisticated themes discussion, branch vhata/site-structure-theming-review, 2026-11-05
+  - Depends on: `site-page-models`
+  - Starting point: [semantic site design](docs/specs/2026-11-05-semantic-site.md) and [implementation plan](plans/2026-11-05-semantic-site.md), step 2; site templates, base theme CSS, and publisher build identity.
+  - Acceptance: ship semantic output version 1 and redesigned format-2 themes with accessible structure, documented hooks, and renderer revision in build identity. Replace obsolete markup, tokens, packs, and presentation routes coherently; no format-1 adapters, old index JSON shape, or legacy-page support are required. Keep repository content inert, source-free index/unpublish rebuilding functional, and resources referenced by live pages available after partial failures. Verify all page/content kinds, every shipped theme and custom example in both modes and narrow layouts, preview/package parity, repository checks, and independent review. Custom templates, JavaScript, and new page-data APIs are excluded.
+
 ## Ready for separate work
 
 ### P0 Critical
@@ -53,3 +59,8 @@ Ordinary follow-ups and bugs found during other work live here. Whole-codebase r
 ### P3 Low
 
 ### Unprioritized
+
+- [SITE] `site-page-models` — **Define versioned page models that retain original public values independently of HTML layout.** Replace positional renderer inputs with named records so templates and future consumers can use complete exported revisions, precise timestamps, byte counts, entry kinds, and generated public URLs without parsing display strings or exposing publisher internals.
+  - Source: site structure and sophisticated themes discussion, branch vhata/site-structure-theming-review, 2026-11-05
+  - Starting point: [semantic site design](docs/specs/2026-11-05-semantic-site.md) and [implementation plan](plans/2026-11-05-semantic-site.md), step 1; src/partlet/site/render.py, tree.py, urls.py, publish.py, and preview.py.
+  - Acceptance: move default rendering to output-version-1 models retaining raw values and safe HTML handling, with deterministic ordering and index/unpublish rebuilding without source or theme files. No old HTML, CSS-hook, display-format, or index JSON compatibility is required. Verify public field allowlists, exported data provenance, absence semantics, timestamp validation, symlinks, escaping, preview and package parity; document the contract, pass repository checks, and complete independent review. Semantic markup and redesigned themes follow in `semantic-site-markup`; custom templates, JavaScript, and new page-data APIs are excluded.
