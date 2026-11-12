@@ -50,7 +50,6 @@ packages = ["src/partlet"]
 include = [
   "/src/partlet/**/*.py",
   "/src/partlet/site/templates/*.html",
-  "/src/partlet/site/style.css",
   "/src/partlet/site/themes/*.css",
   "/scripts/install.sh",
   "/scripts/install-gitleaks.sh",

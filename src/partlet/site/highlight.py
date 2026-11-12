@@ -6,7 +6,7 @@ from pygments.lexers import TextLexer, get_lexer_for_filename
 from pygments.util import ClassNotFound
 
 _FORMATTER = HtmlFormatter(
-    linenos="table", lineanchors="L", anchorlinenos=True, cssclass="hl"
+    linenos="inline", lineanchors="L", anchorlinenos=True, cssclass="hl"
 )
 
 
@@ -15,7 +15,11 @@ def highlight_file(path: str, text: str) -> str:
         lexer = get_lexer_for_filename(path, text, stripnl=False)
     except ClassNotFound:
         lexer = TextLexer(stripnl=False)
-    return highlight(text, lexer, _FORMATTER)
+    return highlight(text, lexer, _FORMATTER).replace(
+        '<div class="hl">',
+        '<div class="hl" tabindex="0" role="region" aria-label="Source code">',
+        1,
+    )
 
 
 def pygments_css() -> str:

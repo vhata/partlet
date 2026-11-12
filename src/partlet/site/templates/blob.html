@@ -3,8 +3,9 @@
 {% block main %}
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Projects</a><span aria-hidden="true">/</span>{% for crumb in page.breadcrumbs %}<a href="{{ crumb.url }}">{{ crumb.label }}</a><span aria-hidden="true">/</span>{% endfor %}<span aria-current="page">{{ page.entry.name }}</span></nav>
 <div class="page-heading"><p class="eyebrow">Source file</p><h1>{{ page.entry.name }}</h1></div>
-<section class="panel source-panel" aria-label="File contents">
-<div class="fileinfo"><span>{{ page.entry.size_bytes | human_size }}</span><a class="button" href="{{ page.raw_url }}">View raw</a></div>
+<p class="tip">Latest commit <code data-partlet-revision="{{ page.project.revision }}">{{ page.project.revision[:12] }}</code> · Updated <time datetime="{{ page.project.updated_at }}">{{ page.project.updated_at[:10] }}</time></p>
+<section class="panel source-panel" aria-label="File contents" data-partlet-entry-kind="{{ page.entry.kind }}" data-partlet-path="{{ page.entry.path }}">
+<div class="fileinfo"><span>{{ page.entry.kind }} · <data value="{{ page.entry.size_bytes }}">{{ page.entry.size_bytes | human_size }}</data></span><a class="button" href="{{ page.raw_url }}">View raw</a></div>
 {% if page.symlink_target is not none %}
 <p class="file-notice">Symbolic link to <code>{{ page.symlink_target }}</code></p>
 {% elif page.source_html %}

@@ -70,3 +70,16 @@ complete.
 | Pre-render the whole site in the publisher; the Worker only maps URLs to stored objects. | Keeps all rendering in tested Python and the Worker small. Cost: template changes need a re-run of the publisher, which re-renders from existing exports without touching Git history. |
 | One source monorepo per site, with every store key under a per-source prefix. | Simplest model for one user. The prefix leaves room for several sources on one site without changing the storage layout. |
 | Shell hooks in a tracked `.githooks/` directory rather than a hook manager. | No dependency to install, and today's gates are shell scripts. Revisit when the Python and TypeScript gates make a polyglot manager such as lefthook worth it. |
+
+## 2026-11-12: Semantic rendering baseline
+
+Output version 1 uses theme format 2 and an independent renderer build
+revision. Theme resources remain immutable and retained for live pages
+through partial publication failures. Source-free index rebuilding uses
+format-tagged durable presentation. The default stylesheet route remains
+necessary for Worker errors and uses the shared Classic layout; the
+separate old stylesheet is removed. The existing public project summary
+route remains useful for publication diagnostics and is not extended
+into a page-model API. Source lines use a preformatted region with
+inline anchors instead of a layout table, preserving useful unstyled
+content.

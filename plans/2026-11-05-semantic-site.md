@@ -1,6 +1,7 @@
 # Semantic site implementation plan
 
-Status: step 1 implemented; step 2 remains queued. The
+Status: steps 1 and 2 implemented; independent review of step 2 remains
+pending. The
 [semantic site design](../docs/specs/2026-11-05-semantic-site.md) is the
 authoritative contract. Both steps need independent review and the
 normal repository gates before they are ready for the user's final

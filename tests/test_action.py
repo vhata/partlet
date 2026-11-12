@@ -225,7 +225,7 @@ def configure_custom_theme(mono):
     mono.write(
         "themes/custom/theme.toml",
         'id = "custom"\nname = "Custom theme"\nversion = "1.0"\n'
-        'format_version = 1\nmodes = ["auto", "light", "dark"]\n'
+        'format_version = 2\nmodes = ["auto", "light", "dark"]\n'
         'license = "MIT"\nassets = []\n',
     )
     mono.write("themes/custom/style.css", ":root { --link: #123456; }\n")

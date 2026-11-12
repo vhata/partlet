@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from importlib import resources
-
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from partlet.site.build import build_index, build_pages
-from partlet.site.highlight import pygments_css
 from partlet.site.models import BlobPage, IndexPage, Project, TreePage
-from partlet.site.themes import ThemePresentation
+from partlet.site.themes import ThemePresentation, resolve_theme
 from partlet.site.tree import FileEntry
 
 _env = Environment(
@@ -63,9 +60,5 @@ def render_site_index(
 
 
 def site_stylesheet() -> bytes:
-    base = (
-        resources.files("partlet.site")
-        .joinpath("style.css")
-        .read_text(encoding="utf-8")
-    )
-    return (base + "\n" + pygments_css() + "\n").encode("utf-8")
+    """Default presentation for unthemed rendering and Worker error pages."""
+    return resolve_theme().resources[0].data

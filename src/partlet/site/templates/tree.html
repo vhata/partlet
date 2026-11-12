@@ -7,24 +7,23 @@
   <h1>{{ page.breadcrumbs[-1].label }}</h1>
   {% if not page.path and page.project.description %}<p class="description intro">{{ page.project.description }}</p>{% endif %}
 </div>
-{% if not page.path %}
 <section class="project panel" aria-labelledby="clone-heading">
   <div class="clone-details">
     <h2 id="clone-heading">Clone this repository</h2>
     <pre class="clone" tabindex="0"><code>git clone {{ page.project.clone_url }}</code></pre>
   </div>
   <div class="project-details">
-    <p class="downloads"><span class="meta-label">Download source</span>{% for archive in page.project.archives %}<a class="button" href="{{ archive.url }}">{{ archive.format }}</a>{% endfor %}</p>
-    <p class="tip"><span class="meta-label">Latest commit</span><code>{{ page.project.revision[:12] }}</code>{% if page.project.updated_at %}<span class="commit-date">Updated <time datetime="{{ page.project.updated_at }}" title="{{ page.project.updated_at }}">{{ page.project.updated_at[:10] }}</time></span>{% endif %}</p>
+    <p class="downloads"><span class="meta-label">Download source</span> {% for archive in page.project.archives %}<a class="button" href="{{ archive.url }}">{{ archive.format }}</a> {% endfor %}</p>
+    <p class="tip"><span class="meta-label">Latest commit</span> <code data-partlet-revision="{{ page.project.revision }}">{{ page.project.revision[:12] }}</code> {% if page.project.updated_at %}<span class="commit-date">Updated <time datetime="{{ page.project.updated_at }}" title="{{ page.project.updated_at }}">{{ page.project.updated_at[:10] }}</time></span>{% endif %}</p>
   </div>
 </section>
-{% endif %}
 <section class="panel file-browser" aria-labelledby="files-heading">
 <div class="section-heading"><h2 id="files-heading">Files</h2><span class="count">{{ page.entries | length }} {{ 'entry' if page.entries | length == 1 else 'entries' }}</span></div>
 {% if page.entries %}
 <table class="listing" aria-label="Files and directories">
+<thead><tr><th scope="col">Name</th><th scope="col" class="entry-kind">Kind</th><th scope="col" class="size">Size</th></tr></thead>
 <tbody>
-{% for entry in page.entries %}<tr><td class="{{ 'dir' if entry.kind == 'directory' else 'file' }}"><a href="{{ entry.url }}">{{ entry.name }}{{ '/' if entry.kind == 'directory' else '' }}</a></td><td{% if entry.size_bytes is not none %} class="size"{% endif %}>{% if entry.size_bytes is not none %}{{ entry.size_bytes | human_size }}{% endif %}</td></tr>
+{% for entry in page.entries %}<tr data-partlet-entry-kind="{{ entry.kind }}" data-partlet-path="{{ entry.path }}"><td class="{{ 'dir' if entry.kind == 'directory' else 'file' }}"><a href="{{ entry.url }}">{{ entry.name }}{{ '/' if entry.kind == 'directory' else '' }}</a></td><td class="entry-kind">{{ entry.kind }}</td><td{% if entry.size_bytes is not none %} class="size"{% endif %}>{% if entry.size_bytes is not none %}<data value="{{ entry.size_bytes }}">{{ entry.size_bytes | human_size }}</data>{% endif %}</td></tr>
 {% endfor %}
 </tbody>
 </table>

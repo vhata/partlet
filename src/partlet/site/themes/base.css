@@ -1,4 +1,4 @@
-/* Theme format 1: shared layout and fallback tokens. */
+/* Theme format 2: shared layout and fallback tokens. */
 :root {
   color-scheme: light;
   --fg: #1f2328;
@@ -70,7 +70,7 @@ body {
 }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-a:focus-visible, pre:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+a:focus-visible, pre:focus-visible, .hl:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
 .skip-link { position: absolute; top: 8px; left: 8px; padding: 8px 16px; background: var(--surface); border: 1px solid var(--line); transform: translateY(-160%); z-index: 1; }
 .skip-link:focus { transform: translateY(0); }
 header.top { border-bottom: 1px solid var(--line); background: var(--surface); }
@@ -114,7 +114,6 @@ table.listing tr:last-child td:first-child { border-bottom-left-radius: var(--ra
 table.listing tr:last-child td:last-child { border-bottom-right-radius: var(--radius); }
 table.listing td.size { width: 7.5em; color: var(--muted); text-align: right; white-space: nowrap; font-size: 12px; }
 table.listing td.dir, table.listing td.file { width: auto; }
-table.listing td.dir + td { width: 7.5em; }
 .dir a, .file a { display: inline-flex; align-items: baseline; gap: 12px; max-width: 100%; }
 .dir a::before, .file a::before { content: ""; display: inline-block; flex-shrink: 0; width: 12px; height: 14px; border: 1px solid var(--muted); border-radius: 2px; position: relative; top: 2px; }
 .dir a::before { width: 15px; height: 11px; border-color: var(--link); background: var(--code-bg); }
@@ -149,10 +148,8 @@ article.readme th { background: var(--code-bg); text-align: left; }
 .file-notice { padding: 24px; overflow-wrap: anywhere; }
 .hl { overflow-x: auto; background: var(--code-bg); color: var(--fg); border-radius: var(--radius); }
 .source-panel .hl { border-radius: 0 0 var(--radius) var(--radius); }
-.hl table { border-collapse: collapse; }
 .hl pre { margin: 0; padding: 16px; line-height: 1.7; }
 .hl .linenos { color: var(--muted); user-select: none; }
-.hl td.linenos { border-right: 1px solid var(--line); }
 .hl .linenos a { color: inherit; }
 .hl a:target { scroll-margin-block: var(--space); }
 .site-footer { max-width: var(--content-width); width: 100%; margin: 0 auto; padding: 24px var(--space); color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); }
@@ -185,4 +182,16 @@ article.readme th { background: var(--code-bg); text-align: left; }
   article.readme h1 { font-size: 24px; }
   .dir a, .file a { gap: 8px; }
   .site-footer { padding: 20px 16px; }
+}
+
+/* Semantic listings keep column names available at every viewport size. */
+table.listing th { text-align: left; padding: 10px 20px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); }
+table.listing th.size { width: 7.5em; text-align: right; }
+table.listing th.entry-kind { width: 8.5em; }
+.entry-kind { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.hl .linenos { display: inline-block; min-width: 3em; margin-right: 1em; }
+.hl a:target { background: var(--line); }
+@media (max-width: 640px) {
+  table.projects thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table.listing th { padding: 10px 16px; }
 }

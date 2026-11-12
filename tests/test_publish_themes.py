@@ -337,7 +337,7 @@ def custom_pack(mono):
     mono.write(
         "themes/custom/theme.toml",
         'id = "custom"\nname = "Custom theme"\nversion = "1.0"\n'
-        'format_version = 1\nmodes = ["auto", "light", "dark"]\n'
+        'format_version = 2\nmodes = ["auto", "light", "dark"]\n'
         'license = "MIT"\nassets = ["assets/logo.png"]\n',
     )
     mono.write(
@@ -412,3 +412,50 @@ def test_commit_changing_during_upload_cannot_mix_theme_versions(
     assert store.get(resource_key(changed)) is None
     assert run(mono, tmp_path, store, themed)[0].status == "published"
     assert json.loads(store.get("s/site-theme.json"))["digest"] == changed.digest
+
+
+def test_renderer_revision_rebuilds_unchanged_export_without_new_approval(
+    mono, tmp_path, prepared, monkeypatch
+):
+    config, store = prepared
+    assert run(mono, tmp_path, store, config)[0].status == "published"
+    before = current(store)
+    git_before = {k: store.get(k) for k in store.list("s/p/foo/git/")}
+    approved = config.projects["foo"].approved
+    monkeypatch.setattr(publish, "RENDERER_REVISION", publish.RENDERER_REVISION + 1)
+    result = run(mono, tmp_path, store, config)[0]
+    assert (result.status, result.reason) == ("published", "re-rendered")
+    after = current(store)
+    assert after["tip"] == before["tip"] == approved
+    assert after["build"] != before["build"]
+    assert {k: store.get(k) for k in store.list("s/p/foo/git/")} == git_before
+    assert run(mono, tmp_path, store, config)[0].status == "unchanged"
+
+
+def test_old_theme_format_is_rejected_before_publication(mono, tmp_path, prepared):
+    config, store = prepared
+    selected = custom_pack(mono)
+    path = mono.path / "themes/custom/theme.toml"
+    path.write_text(
+        path.read_text().replace("format_version = 2", "format_version = 1")
+    )
+    mono.commit("unsupported theme")
+    config = replace(config, site=replace(config.site, theme=selected))
+    with pytest.raises(ThemeError, match="supports 2"):
+        run(mono, tmp_path, store, config)
+    assert store.list("") == []
+
+
+@pytest.mark.parametrize("version", [1, True, "2", 3])
+def test_incompatible_stored_presentation_blocks_unpublish_before_deletion(
+    mono, tmp_path, prepared, version
+):
+    config, store = prepared
+    run(mono, tmp_path, store, config)
+    record = json.loads(store.get("s/site-theme.json"))
+    record["format_version"] = version
+    store.put("s/site-theme.json", json.dumps(record).encode())
+    before = {key: store.get(key) for key in store.list("")}
+    with pytest.raises(StoreError, match="invalid stored site theme"):
+        unpublish_project(store, config.site, "foo")
+    assert {key: store.get(key) for key in store.list("")} == before

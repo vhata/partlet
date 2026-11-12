@@ -11,8 +11,9 @@ public JSON endpoint.
 Every page has `output_version = 1` and `kind` (`index`, `tree`, or
 `blob`). The complete field definitions are in the
 [version-1 design](specs/2026-11-05-semantic-site.md#page-model-contract-version-1).
-The semantic HTML hooks and theme format 2 are a subsequent step; this
-refactor retains the current layout and theme format.
+The renderer ships semantic output version 1 with theme format 2. See
+[the theme contract](THEMES.md#semantic-output-version-1) for HTML
+hooks.
 
 ## Values and provenance
 
