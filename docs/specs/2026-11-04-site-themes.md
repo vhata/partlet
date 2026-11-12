@@ -3,6 +3,11 @@
 Status: accepted design. See [Site themes](../THEMES.md) for usage and
 the theme-author contract.
 
+The planned [semantic site baseline](2026-11-05-semantic-site.md)
+supersedes this design's HTML-hook and backwards-compatibility promises
+when implemented. It permits replacing the markup and themes together;
+no format-1 adapter or legacy presentation support is required.
+
 Partlet should let a publisher choose a bundled theme, adjust its
 appearance, or use a third-party theme without forking Partlet. Theme
 selection belongs in the source repository so local builds and the
