@@ -131,3 +131,63 @@ def test_git_utc_designator_is_preserved():
         build_project("foo", "", "opaque", "https://example.com", stamp).updated_at
         == stamp
     )
+
+
+def test_exported_snapshot_provenance(mono, tmp_path):
+    from partlet.export import export_project
+    from partlet.gitutil import git_out
+    from partlet.manifest import Project as ExportProject
+    from partlet.site.tree import read_tree
+
+    mono.write("foo/a.txt", "exported\n")
+    mono.write("private/secret.txt", "never public\n")
+    source_tip = mono.commit("snapshot")
+    exported = tmp_path / "export.git"
+    tip = export_project(mono.path, "main", ExportProject("foo", "foo"), exported)
+    stamp = git_out("show", "-s", "--format=%cI", tip, cwd=exported)
+    info = build_project("foo", "", tip, "https://example.com", stamp)
+    pages = build_pages(info, read_tree(exported, tip))
+    assert tip != source_tip
+    assert all(page.project.revision == tip for page in pages)
+    assert all(page.project.updated_at == stamp for page in pages)
+    assert [entry.path for entry in pages[0].entries] == ["a.txt"]
+    assert "secret" not in repr(pages)
+
+
+def test_source_free_unpublish_rebuilds_surviving_public_model(tmp_path):
+    import json
+
+    from partlet.manifest import Site, ThemeConfig
+    from partlet.publish import unpublish_project, write_site_index
+    from partlet.site.themes import resolve_theme
+    from partlet.store import LocalStore
+
+    store = LocalStore(tmp_path / "objects")
+    site = Site(source="s", branch="main", base_url="https://example.com")
+    for name in ("keep", "remove"):
+        store.put(
+            f"s/p/{name}/current",
+            json.dumps(
+                {
+                    "name": name,
+                    "description": "<b>public</b>",
+                    "tip": "a" * 64,
+                    "updated": STAMP,
+                    "build": "internal",
+                    "source": "private/path",
+                }
+            ).encode(),
+        )
+    write_site_index(store, site, resolve_theme(ThemeConfig(name="paper")))
+    # No source checkout exists; this nonexistent theme cannot be resolved.
+    site = replace(site, theme=ThemeConfig(name=None, path="missing"))
+    unpublish_project(store, site, "remove")
+    records = json.loads(store.get("s/index.json"))
+    assert [r["name"] for r in records] == ["keep"]
+    model = build_index(site.base_url, records)
+    assert model.projects[0].updated_at == STAMP
+    assert model.projects[0].revision == "a" * 64
+    page = store.get("s/index.html")
+    assert b'href="/keep"' in page and b'href="/remove"' not in page
+    assert b"private/path" not in page and b"internal" not in page
+    assert b"&lt;b&gt;public&lt;/b&gt;" in page
