@@ -17,3 +17,23 @@ def raw_url(project: str, path: str) -> str:
 
 def archive_url(project: str, fmt: str) -> str:
     return f"/{project}/archive/{project}.{fmt}"
+
+
+def clone_url(base_url: str, project: str) -> str:
+    """Build a public clone URL without credentials or active URL schemes."""
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(base_url)
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or any(c.isspace() or ord(c) < 32 or c == "\\" for c in base_url)
+    ):
+        raise ValueError(
+            "base_url must be a public HTTP(S) URL without credentials, query or fragment"
+        )
+    return base_url.rstrip("/") + tree_url(project, "")

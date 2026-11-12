@@ -13,7 +13,8 @@ from partlet.gitutil import git_out
 from partlet.manifest import Manifest
 from partlet.publish import build_id, project_prefix, write_site_index
 from partlet.scan import ScanError, Scanner
-from partlet.site.render import ProjectInfo, render_project
+from partlet.site.build import build_project
+from partlet.site.render import render_project
 from partlet.site.themes import ResolvedTheme
 from partlet.site.tree import read_tree
 from partlet.store import LocalStore
@@ -49,7 +50,7 @@ def build_preview(
                     "run partlet review to inspect them"
                 )
         updated = git_out("show", "-s", "--format=%cI", tip, cwd=exported)
-        info = ProjectInfo(
+        info = build_project(
             project.name, project.description, tip, site.base_url, updated
         )
         pages = render_project(info, read_tree(exported, tip), theme)

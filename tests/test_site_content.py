@@ -3,10 +3,11 @@ import pytest
 from partlet.export import export_project
 from partlet.manifest import Project
 from partlet.site import urls
+from partlet.site.build import build_project
 from partlet.site.highlight import highlight_file, pygments_css
 from partlet.site.links import Linker
 from partlet.site.markdown import render_markdown
-from partlet.site.render import ProjectInfo, render_project
+from partlet.site.render import render_project
 from partlet.site.tree import (
     SIZE_CAP,
     FileEntry,
@@ -63,7 +64,10 @@ def test_unicode_paths_keep_distinct_site_keys_and_links(mono):
     entries = read_tree(mono.path, tip)
     assert {e.path: e.data for e in entries} == files
     pages = render_project(
-        ProjectInfo("foo", "", tip, "https://example.com", ""), entries
+        build_project(
+            "foo", "", tip, "https://example.com", "2026-01-01T00:00:00+00:00"
+        ),
+        entries,
     )
     for path, data in files.items():
         assert pages[f"raw/{path}"] == data

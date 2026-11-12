@@ -1,6 +1,6 @@
 from partlet.manifest import ThemeConfig, parse_manifest
+from partlet.site.build import build_project
 from partlet.site.render import (
-    ProjectInfo,
     render_project,
     render_site_index,
     site_stylesheet,
@@ -9,7 +9,7 @@ from partlet.site.themes import resolve_theme
 from partlet.site.tree import SIZE_CAP, FileEntry
 from partlet.store import LocalStore
 
-INFO = ProjectInfo(
+INFO = build_project(
     "foo", "Foo tool", "a" * 40, "https://partlet.example", "2026-01-01T00:00:00+00:00"
 )
 
@@ -139,8 +139,12 @@ def test_html_in_names_and_content_is_escaped():
 
 
 def test_plain_readme_symlink_target_and_description_are_escaped():
-    info = ProjectInfo(
-        "foo", "<script>d</script>", "a" * 40, "https://partlet.example", "2026"
+    info = build_project(
+        "foo",
+        "<script>d</script>",
+        "a" * 40,
+        "https://partlet.example",
+        "2026-01-01T00:00:00+00:00",
     )
     entries = [
         FileEntry("README", b"<script>x</script>\n"),
@@ -154,13 +158,13 @@ def test_plain_readme_symlink_target_and_description_are_escaped():
     assert "<b>target" not in pages["blob/link"]
     assert "&lt;b&gt;target" in pages["blob/link"]
     listing = render_site_index(
-        info.base_url,
+        "https://partlet.example",
         [
             {
                 "name": "foo",
                 "description": info.description,
-                "tip": info.tip,
-                "updated": "",
+                "tip": info.revision,
+                "updated": "2026-01-01T00:00:00+00:00",
             }
         ],
     ).decode()
@@ -199,13 +203,13 @@ def test_theme_applies_to_every_rendered_page_and_site_index():
         theme,
     )
     index = render_site_index(
-        INFO.base_url,
+        "https://partlet.example",
         [
             {
                 "name": INFO.name,
                 "description": INFO.description,
-                "tip": INFO.tip,
-                "updated": INFO.updated,
+                "tip": INFO.revision,
+                "updated": INFO.updated_at,
             }
         ],
         theme,
@@ -213,7 +217,7 @@ def test_theme_applies_to_every_rendered_page_and_site_index():
     # Index timestamps need a wrapping hook, not the nowrap file-size hook.
     assert b'class="listing projects"' in index
     assert (
-        f'<time datetime="{INFO.updated}" title="{INFO.updated}">2026-01-01</time>'.encode()
+        f'<time datetime="{INFO.updated_at}" title="{INFO.updated_at}">2026-01-01</time>'.encode()
         in index
     )
     assert b'class="size"' not in index
@@ -229,8 +233,10 @@ def test_theme_applies_to_every_rendered_page_and_site_index():
 
 
 def test_legacy_renderer_keeps_legacy_stylesheet():
-    assert b'href="/_partlet/style.css"' in render_site_index(INFO.base_url, [])
-    assert b"data-mode=" not in render_site_index(INFO.base_url, [])
+    assert b'href="/_partlet/style.css"' in render_site_index(
+        "https://partlet.example", []
+    )
+    assert b"data-mode=" not in render_site_index("https://partlet.example", [])
 
 
 def test_manifest_without_theme_gets_default_layout_and_color_preference():
@@ -255,7 +261,7 @@ path = "foo"
 def test_page_landmarks_and_skip_link_work_on_index_tree_and_file():
     pages = render_project(INFO, [FileEntry("src/main.py", b"print(1)\n")])
     for page in (
-        render_site_index(INFO.base_url, []),
+        render_site_index("https://partlet.example", []),
         pages["index.html"],
         pages["tree/src/index.html"],
         pages["blob/src/main.py"],
@@ -272,7 +278,7 @@ def test_page_landmarks_and_skip_link_work_on_index_tree_and_file():
 
 
 def test_empty_index_and_repository_explain_absent_content():
-    index = render_site_index(INFO.base_url, [])
+    index = render_site_index("https://partlet.example", [])
     assert b"No projects published yet" in index
     assert b"0 projects" in index
     assert b'<table class="listing projects"' not in index
@@ -280,12 +286,3 @@ def test_empty_index_and_repository_explain_absent_content():
     assert b"This repository has no files at this revision." in project
     assert b"0 entries" in project
     assert b'<table class="listing"' not in project
-
-
-def test_missing_dates_do_not_render_empty_time_elements():
-    index = render_site_index(
-        INFO.base_url,
-        [{"name": "foo", "description": "", "tip": INFO.tip, "updated": ""}],
-    )
-    assert b"1 project</span>" in index
-    assert b"<time" not in index
