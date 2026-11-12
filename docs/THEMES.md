@@ -6,6 +6,23 @@ file listings, README pages and highlighted source. Theme selection
 lives in your source repository's `partlet.toml` and works in local
 builds and the GitHub Action.
 
+## Use the default layout
+
+No theme configuration is required. With no `[site.theme]`, Partlet uses
+Classic with automatic light and dark colors. It includes a project
+directory, a framed file browser, clone and download actions, and
+readable README pages. The layout adapts to narrow screens and uses
+system fonts without JavaScript or external font downloads.
+
+Existing sites receive the updated layout on their next successful
+publication with the updated Partlet version. Exported Git history and
+approval pins do not change. To see the default locally, leave the theme
+table out of your manifest and run:
+
+```bash
+partlet preview --repo /path/to/source
+```
+
 ## Choose a bundled theme
 
 Add this table to your manifest:
@@ -18,7 +35,7 @@ mode = "auto"
 
 | Name | Appearance |
 | -- | -- |
-| `classic` | The familiar compact repository browser. |
+| `classic` | The default repository browser with clean panels and a teal accent. |
 | `paper` | More breathing room with serif README prose. |
 | `terminal` | A monospace presentation with strong code emphasis. |
 
@@ -32,8 +49,7 @@ Classic, Paper and Terminal on the same synthetic project:
 
 `mode` is `auto`, `light`, or `dark`. Auto follows the visitor's browser
 color preference without JavaScript. There is no visitor toggle or
-per-project theme. With no `[site.theme]`, Partlet uses Classic in auto
-mode. Discover the bundled choices with:
+per-project theme. Discover the bundled choices with:
 
 ```bash
 partlet theme list
@@ -176,10 +192,13 @@ The stable format-1 tokens are:
 
 | Purpose | Variables |
 | -- | -- |
-| Main colors | `--fg`, `--muted`, `--bg`, `--line`, `--link`, `--code-bg`, `--focus` |
+| Main colors | `--fg`, `--muted`, `--bg`, `--surface`, `--line`, `--link`, `--code-bg`, `--focus` |
 | Fonts | `--body-font`, `--prose-font`, `--mono-font`, `--font-size`, `--line-height` |
 | Layout | `--content-width`, `--space`, `--radius` |
 | Code colors | `--syntax-comment`, `--syntax-keyword`, `--syntax-string`, `--syntax-number`, `--syntax-name`, `--syntax-error` |
+
+`--surface` colors panels and the header. It defaults to `var(--bg)` so
+existing themes retain their own background colors.
 
 Use system font stacks. Theme CSS follows Partlet's structural and code
 styles so matching selectors override their defaults. Stable styling
@@ -201,7 +220,7 @@ version does not automatically collect them. Reusing the same inputs
 reuses the same resource namespace.
 
 The legacy stylesheet remains available for earlier pages.
-Worker-generated 404 pages keep Classic styling. Removing a project
+Worker-generated 404 pages keep legacy styling. Removing a project
 rebuilds the index using the stored site presentation; it does not
 require the theme's local source directory or change the surviving
 site's theme.
