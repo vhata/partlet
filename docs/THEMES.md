@@ -271,3 +271,7 @@ theme format and is validated before source-free index rebuilding or
 removal. The existing read-only `/_partlet/index.json` project summary
 remains available for publication diagnostics; it is not page-model
 JSON.
+
+See the [semantic-site validation evidence](SEMANTIC_SITE_VALIDATION.md)
+for representative screenshots, exercised scenarios and local evidence
+limits.
