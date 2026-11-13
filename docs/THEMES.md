@@ -61,11 +61,11 @@ Theme-only changes rebuild pages even when project history is unchanged;
 they do not require new history approval. An invalid theme stops the
 operation before publication instead of silently falling back.
 
-If you already run a public site, update its Worker to the matching
-Partlet version **before publishing themed pages**: older Workers do not
-serve the new theme resource URLs. Installing or selecting a theme does
-not deploy your Worker. Follow the existing
-[upgrade procedure](INSTALLATION.md#upgrades).
+When updating Partlet for an existing site, follow the general
+[upgrade procedure](INSTALLATION.md#upgrades) for the publisher, Worker,
+Action pin and republication. It also covers the format-2 migration and
+stored metadata required before removing projects. Selecting a theme
+does not itself upgrade or deploy Partlet.
 
 ## Install a third-party theme
 
