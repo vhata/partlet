@@ -18,6 +18,9 @@ Keep `partlet.toml` at the root of your source repository. For example:
 [site]
 source = "my-source"
 base_url = "https://partlet.example.com"
+# name = "Example projects" # defaults to the base URL hostname
+# tagline = ""             # optional plain-text footer text
+# readme = "public/home.md" # explicit additional public Markdown input
 branch = "main"
 # mailmap = "public.mailmap"
 
@@ -37,6 +40,9 @@ branch.
 | -- | -- |
 | `site.source` | Required stable storage namespace for this monorepo. Match the Worker's `SOURCE` and workflow concurrency group. |
 | `site.base_url` | Required public site URL, including `https://`, used for links and clone URLs. |
+| `site.name` | Optional display name linked to the site root; defaults to the hostname in `site.base_url`. |
+| `site.tagline` | Optional plain-text text shown at the left of the footer; defaults to empty. |
+| `site.readme` | Optional committed source-repository-relative Markdown file for the homepage introduction; absent means no introduction. See the homepage policy below. |
 | `site.branch` | Source branch to export; defaults to `main`. It must exist locally. Match the workflow's push branch. |
 | `site.mailmap` | Optional path to an author/committer identity mapping file, relative to the source checkout. |
 | `site.theme.name` | Bundled theme: `classic` (default), `paper`, or `terminal`. Mutually exclusive with `site.theme.path`. |
@@ -461,3 +467,35 @@ The upgraded package meets the
 for the verified client; the temporary workaround alone does not. Other
 Git/library combinations need their own verification. Local HTTP smoke
 tests do not cover Cloudflare's HTTP/2 connection behavior.
+
+## Site identity and homepage
+
+`site.name` sets the linked header name; its default is the hostname in
+`site.base_url`. `site.tagline` is optional plain text in the footer,
+empty by default. Both values are escaped, never interpreted as HTML.
+
+Set `site.readme = "public/home.md"` to render an introduction above the
+project list. This is an explicit additional public input, outside the
+project exports: review its text before publishing. No root README is
+automatically selected. The file must be committed on `site.branch`, be
+regular Markdown (`.md` or `.markdown`), and use a source-repository-
+relative path without absolute paths, traversal or symlinks. Builds and
+previews read committed bytes; production also refuses dirty input
+files. An absent setting means no introduction.
+
+Homepage Markdown uses the same inert renderer as project READMEs. Raw
+HTML is escaped and script URLs are suppressed. Links and images may use
+public root-relative URLs, fragments, or absolute HTTP(S) URLs; links
+also allow `mailto:`. Protocol-relative and ambiguous relative
+references are rejected with an actionable error. Rewrite them to public
+URLs. Partlet never follows those references to copy private files or
+assets.
+
+Identity changes regenerate project pages without changing exported Git
+history or approval pins. Homepage-only edits regenerate the index; they
+do not rebuild unchanged project pages. Publication stores only the
+public display strings and rendered introduction, never its source path.
+Removal and index recovery use this validated durable presentation even
+when the source file is unavailable or the local configuration changes.
+During partial publication, failed projects retain their previous pages
+and identity while the index adopts the selected site presentation.

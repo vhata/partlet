@@ -15,6 +15,14 @@ The renderer ships semantic output version 1 with theme format 2. See
 [the theme contract](THEMES.md#semantic-output-version-1) for HTML
 hooks.
 
+The site header uses the configured `site.name` and links to `/`. Its
+fallback is the hostname from `site.base_url`. Optional `site.tagline`
+appears as escaped plain text at the left of the footer. The footer's
+Partlet link points to the Partlet project homepage. Worker-generated
+not-found pages cannot read publisher display settings without another
+store lookup, so they provide a simple Home link instead of
+site-specific branding.
+
 ## Values and provenance
 
 - Projects carry `name`, `description`, full exported `revision`,
@@ -69,3 +77,8 @@ Optional fields with defined absence semantics may be added to version
 1. Removing or renaming fields, changing their type or meaning, or
    changing requiredness requires a new output version. Theme versions
    and renderer build identity are separate contracts.
+
+Index pages optionally carry `intro_html`, absent when no `site.readme`
+is selected. Every page carries public `identity.name` and
+`identity.tagline`. Durable homepage HTML is validated before it regains
+its trusted HTML marker. Source paths never enter these models.

@@ -195,3 +195,9 @@ table.listing th.entry-kind { width: 8.5em; }
   table.projects thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   table.listing th { padding: 10px 16px; }
 }
+
+/* User-selected identity and homepage prose must fit narrow screens. */
+.brand { min-width: 0; overflow-wrap: anywhere; display: block; }
+.site-footer > span { min-width: 0; overflow-wrap: anywhere; }
+.site-footer > span:last-child { margin-left: auto; }
+.homepage { margin-bottom: 24px; }

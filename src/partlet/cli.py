@@ -31,6 +31,7 @@ from partlet.publish import (
 )
 from partlet.review import ReviewError, fetch_published_tip, run_review
 from partlet.scan import ScanError, Scanner
+from partlet.site.homepage import HomepageError, load_homepage
 from partlet.site.themes import BUILTIN_THEMES, ResolvedTheme, ThemeError, resolve_theme
 from partlet.store import (
     LocalPathError,
@@ -480,7 +481,7 @@ def _publish_into(
             results = publish_all(
                 repo, manifest, store, Path(tmp), scanner, theme=theme
             )
-    except (LockError, StoreError, LocalPathError, OSError) as e:
+    except (LockError, StoreError, LocalPathError, OSError, HomepageError) as e:
         print(f"partlet: {e}", file=sys.stderr)
         _save_summary(summary, summary_markdown(title, [], versions, error=str(e)))
         return 1
@@ -519,11 +520,13 @@ def _build(args: argparse.Namespace) -> int:
             manifest_path=manifest_path,
             require_clean=args.require_committed,
         )
+        load_homepage(repo, manifest.site, require_clean=args.require_committed)
         tools = check_tools(gitleaks=args.scan)
     except (
         ManifestError,
         CheckoutError,
         ThemeError,
+        HomepageError,
         ToolError,
         OSError,
         UnicodeError,
@@ -559,6 +562,7 @@ def _preview(args: argparse.Namespace) -> int:
                 "no projects configured; add [projects.NAME] to the manifest"
             )
         runtime.worker_root()  # Fail before exporting if setup has not been run.
+        load_homepage(repo, manifest.site, require_clean=args.require_committed)
         tools = check_tools(gitleaks=args.scan)
         theme = resolve_theme(
             manifest.site.theme,
@@ -595,6 +599,7 @@ def _preview(args: argparse.Namespace) -> int:
     except (
         ManifestError,
         ThemeError,
+        HomepageError,
         ToolError,
         ExportError,
         GitError,
@@ -628,6 +633,7 @@ def _publish(args: argparse.Namespace) -> int:
             manifest_path=manifest_path,
             require_clean=True,
         )
+        load_homepage(repo, manifest.site, require_clean=True)
         tools = check_tools(gitleaks=True)
         store = R2Store(config)
     except (
@@ -635,6 +641,7 @@ def _publish(args: argparse.Namespace) -> int:
         ManifestError,
         CheckoutError,
         ThemeError,
+        HomepageError,
         ToolError,
         OSError,
         UnicodeError,

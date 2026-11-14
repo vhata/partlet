@@ -215,6 +215,19 @@ deleting project data; if it reports `invalid stored site theme`,
 publish with the updated version first, then retry removal. Do not
 delete stored metadata or recreate the bucket to work around that check.
 
+### Site identity and homepage
+
+Site identity and homepage support require updating the publisher/Action
+and republishing. Existing sites default to their public URL hostname
+and an empty tagline, with no homepage introduction. This renderer
+revision regenerates pages without new export approval. Publish
+successfully to persist identity and homepage metadata before
+source-free removal. When that metadata is absent, removal uses the
+manifest identity and no introduction. Malformed metadata stops removal
+before deleting live state; repair it by publishing successfully. Output
+version 1 and theme format 2 retain their existing meanings; no format-1
+theme adapter is provided.
+
 ## Moving from the checkout-based instructions
 
 Copy your edited `worker/wrangler.toml` to a deployment directory you

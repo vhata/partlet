@@ -275,3 +275,9 @@ JSON.
 See the [semantic-site validation evidence](SEMANTIC_SITE_VALIDATION.md)
 for representative screenshots, exercised scenarios and local evidence
 limits.
+
+Site owners can configure the header name, footer tagline and optional
+homepage Markdown through the
+[publishing guide](PUBLISHING.md#site-identity-and-homepage). The
+introduction uses `article.readme.homepage` and precedes the project
+listing. Allow long identity strings to wrap in narrow layouts.

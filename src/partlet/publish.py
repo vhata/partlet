@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from markupsafe import Markup
+
 from partlet import __version__
 from partlet.archive import ARCHIVE_FORMATS, make_archives
 from partlet.export import ExportError, export_project
@@ -20,6 +22,8 @@ from partlet.history import HistoryError, check_history
 from partlet.manifest import NAME_RE, Manifest, Project, Site, parse_manifest
 from partlet.scan import ScanError, Scanner
 from partlet.site.build import build_project, project_from_record
+from partlet.site.homepage import load_homepage, stored_homepage
+from partlet.site.models import SiteIdentity
 from partlet.site.render import (
     render_project,
     render_site_index,
@@ -107,16 +111,24 @@ def project_prefix(source: str, name: str) -> str:
 
 
 # Bump for renderer changes requiring regeneration, independently of model versions.
-RENDERER_REVISION = 1
+RENDERER_REVISION = 2
 
 
 def build_id(
-    tip: str, description: str, base_url: str, theme_digest: str | None = None
+    tip: str,
+    description: str,
+    base_url: str,
+    theme_digest: str | None = None,
+    identity: SiteIdentity | None = None,
 ) -> str:
+    if identity is None:
+        from urllib.parse import urlsplit
+
+        identity = SiteIdentity(urlsplit(base_url).hostname or base_url)
     if theme_digest is None:
         theme_digest = resolve_theme().digest
     digest = hashlib.sha256(
-        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}\0{RENDERER_REVISION}\0{theme_digest}".encode()
+        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}\0{RENDERER_REVISION}\0{theme_digest}\0{json.dumps([identity.name, identity.tagline] if identity else [], ensure_ascii=True)}".encode()
     )
     return digest.hexdigest()[:16]
 
@@ -192,7 +204,10 @@ def publish_project(
             repo, tip, state.tip, project.approved, project.allow_rewrite_of
         )
         current = _read_json(store, f"{prefix}/current")
-        build = build_id(tip, project.description, site.base_url, theme.digest)
+        identity = SiteIdentity(site.name, site.tagline)
+        build = build_id(
+            tip, project.description, site.base_url, theme.digest, identity
+        )
         # Validate paths even for an existing build produced by an older
         # publisher, and before any uploads or pointer changes.
         entries = read_tree(repo, tip)
@@ -200,7 +215,7 @@ def publish_project(
         info = build_project(
             project.name, project.description, tip, site.base_url, updated
         )
-        rendered = render_project(info, entries, theme)
+        rendered = render_project(info, entries, theme, identity)
         if isinstance(store, LocalStore):
             store.validate_keys(f"{prefix}/site/{build}/{key}" for key in rendered)
         same_build = (
@@ -390,9 +405,17 @@ def _stored_theme(store: Store, source: str) -> ThemePresentation | None:
 
 
 def write_site_index(
-    store: Store, site: Site, theme: ResolvedTheme | None = None
+    store: Store,
+    site: Site,
+    theme: ResolvedTheme | None = None,
+    intro_html: Markup | None = None,
 ) -> None:
     presentation = theme if theme is not None else _stored_theme(store, site.source)
+    identity = SiteIdentity(site.name, site.tagline)
+    if theme is None:
+        identity, intro_html = stored_homepage(
+            store.get(f"{site.source}/site-identity.json"), site
+        )
     if theme is not None:
         _upload_theme(store, site, theme)
     # The Worker error page needs a source-independent default stylesheet.
@@ -427,10 +450,21 @@ def write_site_index(
                 "format_version": FORMAT_VERSION,
             },
         )
+    if theme is not None:
+        _put_json(
+            store,
+            f"{site.source}/site-identity.json",
+            {
+                "version": 1,
+                "name": identity.name,
+                "tagline": identity.tagline,
+                "intro_html": intro_html,
+            },
+        )
     _put_json(store, f"{site.source}/index.json", projects)
     store.put(
         f"{site.source}/index.html",
-        render_site_index(site.base_url, projects, presentation),
+        render_site_index(site.base_url, projects, presentation, identity, intro_html),
         "text/html; charset=utf-8",
     )
 
@@ -446,6 +480,7 @@ def unpublish_project(store: Store, site: Site, name: str) -> int:
     # Validate durable presentation before removing any live state. Theme
     # source files may no longer exist locally during an explicit removal.
     _stored_theme(store, site.source)
+    stored_homepage(store.get(f"{site.source}/site-identity.json"), site)
     prefix = f"{project_prefix(site.source, name)}/"
     keys = store.list(prefix)
     current = f"{prefix}current"
@@ -480,6 +515,7 @@ def publish_all(
         theme = resolve_theme(
             manifest.site.theme, monorepo, branch=manifest.site.branch
         )
+    intro_html = load_homepage(monorepo, manifest.site)
     results = []
     for project in manifest.projects.values():
         try:
@@ -491,5 +527,5 @@ def publish_all(
                 project.name, "failed", reason=f"{type(e).__name__}: {e}"
             )
         results.append(result)
-    write_site_index(store, manifest.site, theme)
+    write_site_index(store, manifest.site, theme, intro_html)
     return results
