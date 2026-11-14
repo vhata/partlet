@@ -62,10 +62,10 @@ they do not require new history approval. An invalid theme stops the
 operation before publication instead of silently falling back.
 
 When updating Partlet for an existing site, follow the general
-[upgrade procedure](INSTALLATION.md#upgrades) for the publisher, Worker,
-Action pin and republication. It also covers the format-2 migration and
-stored metadata required before removing projects. Selecting a theme
-does not itself upgrade or deploy Partlet.
+[upgrade procedure](UPGRADING.md#upgrade-a-site) for the publisher,
+Worker, Action pin and republication. It also covers the format-2
+migration and stored metadata required before removing projects.
+Selecting a theme does not itself upgrade or deploy Partlet.
 
 ## Install a third-party theme
 

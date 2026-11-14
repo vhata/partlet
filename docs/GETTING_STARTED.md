@@ -189,7 +189,7 @@ partlet worker deploy --config "$PARTLET_SITE/wrangler.toml"
 The real deployment identifies its billable target and asks for
 confirmation. A dry run bundles locally and does not deploy. Installed
 tool upgrades preserve this config; upgrading the hosted Worker requires
-an explicit deployment. See [upgrades](INSTALLATION.md#upgrades).
+an explicit deployment. See [upgrades](UPGRADING.md#upgrade-a-site).
 
 Wrangler prints the deployed URL and R2 binding in the terminal. Check
 that they match your choices. In your source repository's

@@ -160,7 +160,7 @@ an existing site.
 The installed tool also provides `partlet setup [--worker]` for explicit
 dependency installation, and `partlet worker` commands for independent
 Wrangler configurations, local preview, and user-run deployment. See
-[installation and upgrades](INSTALLATION.md) and the
+[installation](INSTALLATION.md), [upgrades](UPGRADING.md) and the
 [first-site guide](GETTING_STARTED.md). These commands do not use the
 publisher's `--manifest` option or R2 write credentials.
 
@@ -309,7 +309,7 @@ fingerprints when it appears in both an original commit and a merge.
 ## Removing a project
 
 After upgrading Partlet, complete the
-[applicable migration](INSTALLATION.md#semantic-output-version-1-migration)
+[applicable migration](UPGRADING.md#semantic-output-version-1-migration)
 before removing a project. The semantic-output upgrade requires a
 successful publication to update stored theme metadata first.
 
