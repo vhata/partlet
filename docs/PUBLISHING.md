@@ -12,7 +12,10 @@ needs your private repository or the publisher's write credentials.
 
 ## Manifest reference
 
-Keep `partlet.toml` at the root of your source repository. For example:
+Keep `partlet.toml` at the root of your source repository. A complete
+commented [example manifest](../examples/partlet.toml) is available to
+copy. For site appearance and homepage setup, follow
+[Configure your site](SITE.md). For example:
 
 ```toml
 [site]
@@ -41,7 +44,7 @@ branch.
 | `site.source` | Required stable storage namespace for this monorepo. Match the Worker's `SOURCE` and workflow concurrency group. |
 | `site.base_url` | Required public site URL, including `https://`, used for links and clone URLs. |
 | `site.name` | Optional display name linked to the site root; defaults to the hostname in `site.base_url`. |
-| `site.tagline` | Optional plain-text text shown at the left of the footer; defaults to empty. |
+| `site.tagline` | Optional plain text shown at the left of the footer; defaults to empty. |
 | `site.readme` | Optional committed source-repository-relative Markdown file for the homepage introduction; absent means no introduction. See the homepage policy below. |
 | `site.branch` | Source branch to export; defaults to `main`. It must exist locally. Match the workflow's push branch. |
 | `site.mailmap` | Optional path to an author/committer identity mapping file, relative to the source checkout. |
@@ -472,6 +475,10 @@ tests do not cover Cloudflare's HTTP/2 connection behavior.
 
 ## Site identity and homepage
 
+For a step-by-step setup, example Markdown, preview instructions and
+editing/removal tasks, see [Configure your site](SITE.md). This section
+defines the input and publication rules.
+
 `site.name` sets the linked header name; its default is the hostname in
 `site.base_url`. `site.tagline` is optional plain text in the footer,
 empty by default. Both values are escaped, never interpreted as HTML.
@@ -486,7 +493,7 @@ through project secret scanning: neither production publication nor
 `build --scan` or `preview --scan` scans this file. Review it for
 secrets and other private material before selecting it and before
 publishing changes. No root README is automatically selected. The file
-must be committed on `site.branch`, be regular Markdown (`.md` or
+must be committed on `site.branch`, be UTF-8 regular Markdown (`.md` or
 `.markdown`), and use a path relative to the source repository, without
 absolute paths, traversal or symlinks. Builds and previews read
 committed bytes; production also refuses dirty input files. An absent
@@ -495,10 +502,12 @@ setting means no introduction.
 Homepage Markdown uses the same inert renderer as project READMEs. Raw
 HTML is escaped and script URLs are suppressed. Links and images may use
 public root-relative URLs, fragments, or absolute HTTP(S) URLs; links
-also allow `mailto:`. Protocol-relative and ambiguous relative
-references are rejected with an actionable error. Rewrite them to public
-URLs. Partlet never follows those references to copy private files or
-assets.
+also allow `mailto:`. Use HTTPS for external images: the Worker blocks
+external HTTP images. Fragment links need an existing target; Markdown
+headings do not receive automatic IDs. Protocol-relative and ambiguous
+relative references are rejected with an actionable error. Rewrite them
+to public URLs. Partlet never follows those references to copy private
+files or assets.
 
 Identity changes regenerate project pages without changing exported Git
 history or approval pins. Homepage-only edits regenerate the index; they

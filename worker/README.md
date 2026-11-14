@@ -48,13 +48,16 @@ command also uses localhost. Use `--port 8788` for another port and
 Preview includes all configured projects, even those without publication
 approval or with an outdated approval. It never changes the manifest or
 approves publication. It exports committed history from `site.branch`,
-using the current manifest and committed vendored theme files;
-uncommitted source or vendored CSS changes are not included. There is no
-automatic rebuild: commit source/theme changes to that branch, then stop
-with Ctrl-C and rerun. Manifest-only changes can be previewed without a
-commit. Add `--scan` to scan history before serving; scanning is off by
-default for this local browsing command. Publication still requires its
-own review and mandatory secret scan.
+using the current manifest, committed homepage Markdown and committed
+vendored theme files. Uncommitted source, homepage or vendored CSS
+changes are not included. There is no automatic rebuild: commit content
+and theme changes to that branch, then stop with Ctrl-C and rerun.
+Manifest-only changes can be previewed without a commit. Add `--scan` to
+scan history before serving; scanning is off by default for this local
+browsing command. Project publication still requires its own review and
+mandatory secret scan. The optional homepage introduction is not scanned
+and has separate publication authorization; see
+[Configure your site](../docs/SITE.md).
 
 The command builds into a fresh temporary object store, seeds simulated
 R2 and runs the actual Worker bound to `127.0.0.1`. It creates no cloud

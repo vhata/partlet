@@ -77,35 +77,19 @@ scanner installer. A source checkout is not required at runtime. Use the
 commit associated with that build for your GitHub Action. These
 instructions do not imply a published PyPI package or release download.
 
-## Site configuration
+## Configure your source repository
 
-Keep `partlet.toml` in your source repository. Set the storage namespace
-and public URL, then choose the site's display name and optional footer
-text:
+Create `partlet.toml` in your source repository, starting from the
+[example manifest](../examples/partlet.toml) or the
+[README setup steps](../README.md#2-choose-a-project). It selects the
+projects to publish and their public address.
 
-```toml
-[site]
-source = "personal"
-base_url = "https://code.example.com"
-name = "My projects"
-tagline = "Tools and experiments"
-# readme = "public/home.md"
-```
-
-Without `name`, the header uses the public URL's hostname. Without
-`tagline`, the footer has no tagline. To add an introduction above the
-project list, set `readme` to a Markdown file committed on the
-publishing branch. No README is selected automatically.
-
-Selecting a homepage file authorizes its publication independently of
-project approvals. It is not secret-scanned, including with `--scan`;
-review its contents before selecting it and before publishing changes.
-See the [homepage policy](PUBLISHING.md#site-identity-and-homepage) for
-file and link requirements, and the
-[manifest reference](PUBLISHING.md#manifest-reference) for project
-selection and other settings. Follow
-[first-site setup](GETTING_STARTED.md) to connect this configuration to
-hosting and publication.
+Follow [Configure your site](SITE.md) to set the name, optional footer
+text and homepage Markdown, then commit and preview the content. That
+guide includes an example homepage and the publication rules for it.
+Site content belongs in this source configuration, not in the deployment
+directory below. For cloud setup and first publication, continue with
+[Publish your first site](GETTING_STARTED.md).
 
 ## Deployment directories
 

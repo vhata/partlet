@@ -157,7 +157,9 @@ def _parser() -> argparse.ArgumentParser:
         "build all approved projects into a local store",
         "Export every approved project into a local object store. Unapproved "
         "projects are skipped. Output is for 'partlet worker preview', "
-        "not a directory to open directly in a browser. Nothing is uploaded.",
+        "not a directory to open directly in a browser. Includes the selected "
+        "committed site.readme introduction, which is not secret-scanned. "
+        "Nothing is uploaded.",
         "  partlet build --scan --out ./preview\n"
         "  partlet build --scan --out ./preview --repo /path/to/source",
     )
@@ -168,7 +170,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--scan",
         action="store_true",
-        help="scan each export with gitleaks before writing it, as publish does",
+        help="scan each project export with gitleaks; does not scan site.readme",
     )
     _summary_arg(build)
 
@@ -180,7 +182,7 @@ def _parser() -> argparse.ArgumentParser:
         "them at localhost using the real Worker and simulated R2. No hosting "
         "configuration or cloud account is needed. Requires 'partlet setup "
         "--worker' once. Reads committed history from site.branch, plus the "
-        "current manifest; uncommitted source and vendored theme edits are not "
+        "current manifest; uncommitted source, site.readme and vendored theme edits are not "
         "included. Stop with Ctrl-C; temporary output is removed. Approvals "
         "and the source checkout are not changed.",
         "  partlet preview\n"
@@ -198,7 +200,7 @@ def _parser() -> argparse.ArgumentParser:
     preview.add_argument(
         "--scan",
         action="store_true",
-        help="scan exported history for secrets before serving (off by default)",
+        help="scan project history before serving; excludes site.readme (off by default)",
     )
 
     publish = _command(
@@ -207,7 +209,9 @@ def _parser() -> argparse.ArgumentParser:
         "publish all approved projects to R2 (used by CI)",
         "Scan and publish every approved project to Cloudflare R2. Requires "
         "PARTLET_R2_* credentials, HEAD at the publishing branch tip, and a "
-        "committed manifest. Normally run by your GitHub Action after a push.",
+        "committed manifest. Also publishes the selected site.readme introduction "
+        "without secret scanning or project approval. Normally run by your "
+        "GitHub Action after a push.",
         "  partlet publish\n"
         "  partlet publish --repo /path/to/source --summary ./summary.md",
     )

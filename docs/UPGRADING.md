@@ -67,6 +67,10 @@ delete stored metadata or recreate the bucket to work around that check.
 
 ### Site identity and homepage
 
+Use [Configure your site](SITE.md) and the
+[example manifest](../examples/partlet.toml) to choose the name, tagline
+and optional homepage file before previewing and republishing.
+
 Site identity and homepage support require updating the publisher/Action
 and republishing. Existing sites default to their public URL hostname
 and an empty tagline, with no homepage introduction. This renderer

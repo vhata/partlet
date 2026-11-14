@@ -6,6 +6,10 @@ file listings, README pages and highlighted source. Theme selection
 lives in your source repository's `partlet.toml` and works in local
 builds and the GitHub Action.
 
+Set your [site name, footer and homepage content](SITE.md) separately in
+`[site]`. These settings work with every theme; `name` under
+`[site.theme]` selects the appearance, not the site name.
+
 ## Use the default layout
 
 No theme configuration is required. With no `[site.theme]`, Partlet uses
@@ -14,10 +18,8 @@ directory, a framed file browser, clone and download actions, and
 readable README pages. The layout adapts to narrow screens and uses
 system fonts without JavaScript or external font downloads.
 
-Existing sites receive the updated layout on their next successful
-publication with the updated renderer revision. Exported Git history and
-approval pins do not change. To see the default locally, leave the theme
-table out of your manifest and run:
+To see the default locally, leave the theme table out of your manifest
+and run:
 
 ```bash
 partlet preview --repo /path/to/source
