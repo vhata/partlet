@@ -221,3 +221,29 @@ def test_invalid_unicode_metadata_cannot_remove_live_state(tmp_path, field):
     record = {"version": 1, "name": "x", "tagline": "", "intro_html": None}
     record[field] = "\ud800"
     test_bad_metadata_blocks_removal(tmp_path, record)
+
+
+@pytest.mark.parametrize("git_repository", [True, False])
+def test_build_reports_homepage_source_errors(mono, tmp_path, capsys, git_repository):
+    from partlet.cli import main
+
+    manifest = (
+        '[site]\nsource="s"\nbase_url="https://example.test"\n'
+        'branch="absent"\nreadme="home.md"\n'
+    )
+    if git_repository:
+        mono.write("home.md", "# Public homepage")
+        mono.write("partlet.toml", manifest)
+        mono.commit("homepage configuration")
+        repo = mono.path
+    else:
+        repo = tmp_path / "not-a-repository"
+        repo.mkdir()
+        (repo / "partlet.toml").write_text(manifest)
+    out = tmp_path / "output"
+    assert main(["build", "--repo", str(repo), "--out", str(out)]) == 2
+    error = capsys.readouterr().err
+    assert "site.readme" in error and "local branch 'absent'" in error
+    assert "--repo" in error and "fetch or create" in error
+    assert "Traceback" not in error
+    assert not out.exists()

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from markupsafe import Markup
 
-from partlet.gitutil import git, git_out
+from partlet.gitutil import GitError, git, git_out
 from partlet.manifest import Site
 from partlet.site.markdown import render_markdown
 from partlet.site.models import SiteIdentity
@@ -37,6 +37,19 @@ class HomepageLinks:
 
 def load_homepage(
     repo: Path, site: Site, *, require_clean: bool = False
+) -> Markup | None:
+    try:
+        return _load_committed_homepage(repo, site, require_clean=require_clean)
+    except GitError as exc:
+        raise HomepageError(
+            f"cannot read site.readme from local branch {site.branch!r}; "
+            "check that --repo names the source Git repository and fetch or "
+            "create the configured site.branch locally before retrying"
+        ) from exc
+
+
+def _load_committed_homepage(
+    repo: Path, site: Site, *, require_clean: bool
 ) -> Markup | None:
     if site.readme is None:
         return None

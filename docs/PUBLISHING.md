@@ -78,10 +78,12 @@ update that writes project content is scanned for secrets first. An
 unchanged run can return without repeating the scan.
 
 To keep something private, keep it outside the declared project paths
-and their history. Files deleted years ago, commit messages and author
+and their history, and out of explicitly selected public inputs such as
+`site.readme`. Files deleted years ago, commit messages and author
 identities can still be public. Secret scanning helps find credentials;
 it does not decide whether all the historical content is suitable for
-publication.
+publication. The [homepage policy](#site-identity-and-homepage) has a
+separate approval and scanning boundary.
 
 Re-run review when adding a project, changing exported paths or changing
 identity mappings. To move `tools/foo` to `packages/foo`, set the new
@@ -476,12 +478,19 @@ empty by default. Both values are escaped, never interpreted as HTML.
 
 Set `site.readme = "public/home.md"` to render an introduction above the
 project list. This is an explicit additional public input, outside the
-project exports: review its text before publishing. No root README is
-automatically selected. The file must be committed on `site.branch`, be
-regular Markdown (`.md` or `.markdown`), and use a source-repository-
-relative path without absolute paths, traversal or symlinks. Builds and
-previews read committed bytes; production also refuses dirty input
-files. An absent setting means no introduction.
+project exports. Selecting the file authorizes publication of its
+current committed contents independently of project approvals, even when
+no projects are approved or configured. Later committed edits are
+published without a new project approval. Homepage content is not passed
+through project secret scanning: neither production publication nor
+`build --scan` or `preview --scan` scans this file. Review it for
+secrets and other private material before selecting it and before
+publishing changes. No root README is automatically selected. The file
+must be committed on `site.branch`, be regular Markdown (`.md` or
+`.markdown`), and use a path relative to the source repository, without
+absolute paths, traversal or symlinks. Builds and previews read
+committed bytes; production also refuses dirty input files. An absent
+setting means no introduction.
 
 Homepage Markdown uses the same inert renderer as project READMEs. Raw
 HTML is escaped and script URLs are suppressed. Links and images may use
