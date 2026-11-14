@@ -59,6 +59,8 @@ def test_preview_unapproved_project_has_real_pages_archives_and_clonable_history
         page = store.get(f"{prefix}/index.html")
         assert b"# Foo" not in page  # Markdown was rendered.
         assert b"<h1>Foo</h1>" in page
+        assert b'data-partlet-output-version="1"' in page
+        assert b'data-partlet-revision="' + current["tip"].encode() + b'"' in page
         assert b"uncommitted content" not in page
         assert b"http://127.0.0.1:8899/foo" in page
         assert b"https://partlet.example" not in page

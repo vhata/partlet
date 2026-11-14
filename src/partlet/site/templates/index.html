@@ -10,13 +10,14 @@
   <div class="section-heading"><h2 id="projects-heading">All projects</h2><span class="count">{{ page.projects | length }} {{ 'project' if page.projects | length == 1 else 'projects' }}</span></div>
   {% if page.projects %}
   <table class="listing projects" aria-label="Published projects">
+    <thead><tr><th scope="col">Repository</th><th scope="col">Description</th><th scope="col">Latest commit</th><th scope="col">Updated</th></tr></thead>
     <tbody>
     {% for p in page.projects %}
-    <tr>
+    <tr data-partlet-project="{{ p.name }}">
       <td class="project-name"><a href="{{ p.url }}">{{ p.name }}</a><span class="project-label">Repository</span></td>
       <td class="description">{{ p.description }}</td>
-      <td class="revision"><span class="meta-label">Latest commit</span><code>{{ p.revision[:12] }}</code></td>
-      <td class="updated">{% if p.updated_at %}<span class="meta-label">Updated</span><time datetime="{{ p.updated_at }}" title="{{ p.updated_at }}">{{ p.updated_at[:10] }}</time>{% endif %}</td>
+      <td class="revision"><span class="meta-label">Latest commit</span> <code data-partlet-revision="{{ p.revision }}">{{ p.revision[:12] }}</code></td>
+      <td class="updated">{% if p.updated_at %}<span class="meta-label">Updated</span> <time datetime="{{ p.updated_at }}" title="{{ p.updated_at }}">{{ p.updated_at[:10] }}</time>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

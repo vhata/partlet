@@ -300,6 +300,11 @@ fingerprints when it appears in both an original commit and a merge.
 
 ## Removing a project
 
+After upgrading Partlet, complete the
+[applicable migration](INSTALLATION.md#semantic-output-version-1-migration)
+before removing a project. The semantic-output upgrade requires a
+successful publication to update stored theme metadata first.
+
 Removing a project from the manifest stops future publication but does
 not delete the copy already stored. Remove its `[projects.NAME]` table,
 commit and push that change first, and verify any earlier publishing run

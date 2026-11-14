@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"{% if theme %} data-theme="{{ theme.name }}" data-mode="{{ theme.mode }}"{% endif %}>
+<html lang="en" data-partlet-page="{{ page.kind }}" data-partlet-output-version="{{ page.output_version }}" data-theme="{{ theme.name if theme else 'classic' }}" data-mode="{{ theme.mode if theme else 'auto' }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,9 +14,9 @@
     <a class="home-link" href="/">Public repositories</a>
   </div>
 </header>
-<main id="content" tabindex="-1">
+<main id="content" tabindex="-1"{% if page.project is defined %} data-partlet-project="{{ page.project.name }}"{% endif %}>
 {% block main %}{% endblock %}
 </main>
-<footer class="site-footer"><span>Code, out in the open.</span><span>Published with <a href="/">Partlet</a></span></footer>
+<footer class="site-footer"><span>Code, out in the open.</span> <span>Published with <a href="/">Partlet</a></span></footer>
 </body>
 </html>

@@ -45,8 +45,9 @@ const NOT_FOUND_HTML = `<!doctype html>
 <link rel="stylesheet" href="/_partlet/style.css">
 </head>
 <body>
-<header class="top"><a href="/">Partlet</a></header>
-<main>
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="top"><div class="top-inner"><a class="brand" href="/">Partlet</a></div></header>
+<main id="content" tabindex="-1">
 <h1>Not found</h1>
 <p>There is no project or file at this address.</p>
 </main>

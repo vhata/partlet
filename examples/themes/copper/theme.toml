@@ -1,7 +1,7 @@
 id = "copper"
 name = "Copper"
 version = "1.0.0"
-format_version = 1
+format_version = 2
 modes = ["auto", "light", "dark"]
 license = "MIT"
 assets = []

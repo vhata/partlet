@@ -20,7 +20,7 @@ BUILTIN_THEMES = {
     "paper": "Spacious serif prose and a warm reading surface",
     "terminal": "Restrained monospace layout with code emphasis",
 }
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 _SEGMENT = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*")
 _ASSET_TYPES = {
     "png": "image/png",
@@ -125,7 +125,9 @@ def _metadata(data: bytes) -> dict:
         type(raw["format_version"]) is not int
         or raw["format_version"] != FORMAT_VERSION
     ):
-        raise ThemeError("unsupported theme format_version; this Partlet supports 1")
+        raise ThemeError(
+            "unsupported theme format_version; this Partlet supports 2 (output version 1); format-1 packs are unsupported"
+        )
     for key in ("id", "name", "version", "license"):
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise ThemeError(f"theme.toml {key} must be a non-empty string")
@@ -183,19 +185,19 @@ def _check_css(data: bytes, assets: set[str]) -> None:
         raise ThemeError("theme style.css must be UTF-8") from exc
     # A deliberately small, readable pack format, not a CSS security sandbox.
     # Escaped identifiers/URLs and imports would make the asset inventory
-    # ambiguous without a full CSS parser. Use literal characters in v1.
+    # ambiguous without a full CSS parser. Use literal characters in format 2.
     if "\\" in css:
         raise ThemeError(
-            "theme CSS escapes are unsupported in format 1; use literal characters"
+            "theme CSS escapes are unsupported in format 2; use literal characters"
         )
     css = _without_css_comments(css)
     if re.search(r"@(?:import|font-face)\b", css, re.IGNORECASE):
-        raise ThemeError("theme format 1 does not support CSS imports or custom fonts")
+        raise ThemeError("theme format 2 does not support CSS imports or custom fonts")
     if re.search(
         r"(?:\bimage(?:-set)?|-webkit-image-set|\bsrc)\s*\(", css, re.IGNORECASE
     ):
         raise ThemeError(
-            "theme format 1 requires url() image references; image(), image-set() and src() are unsupported"
+            "theme format 2 requires url() image references; image(), image-set() and src() are unsupported"
         )
     for match in _URL.finditer(css):
         value = next(group for group in match.groups() if group is not None)

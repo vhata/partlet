@@ -168,13 +168,52 @@ partlet setup --worker
 
 Updating the installed application and preparing its dependencies does
 not rewrite your Wrangler configs, manifests, approvals or GitHub
-workflow. It does not deploy a Worker. Review the new version, run a
-local preview and dry-run bundle, deploy explicitly, then update your
-GitHub Action to the matching commit.
+workflow. It does not deploy a Worker or regenerate published pages. For
+each existing site:
 
-For an existing deployment, wait at least 60 seconds after deploying
-before publishing, so legacy Git metadata cache entries can expire.
-Follow any additional migration instructions for the chosen version.
+1. Read the migration notes below and prepare any required source
+   changes. Run `partlet preview --repo /path/to/source` with the
+   updated publisher.
+1. Check the Worker bundle with
+   `partlet worker deploy --config /path/to/wrangler.toml --dry-run`.
+   Deploy explicitly with the same command without `--dry-run`, using
+   the site's existing configuration. Worker deployment changes a
+   billable Cloudflare service; the dry run does not deploy it.
+1. Wait at least 60 seconds so legacy Git metadata cache entries can
+   expire, then update the GitHub Action's Partlet commit pin to the
+   same reviewed revision, if the site uses the Action.
+1. Run the normal publishing workflow, or run
+   `partlet publish --repo /path/to/source` with the site's R2
+   credentials. Check that every intended project reports `published` or
+   `unchanged`; investigate `failed` or `skipped` results before calling
+   the upgrade complete.
+
+Keep the existing buckets, domains, manifest source prefixes and
+approval pins. Installing Partlet and deploying its Worker leave stored
+project pages unchanged until publication. Renderer or theme changes
+rebuild pages automatically on publication, even without new project
+commits; they do not change exported history or require renewed history
+approval.
+
+### Semantic output version 1 migration
+
+This release introduces semantic output version 1 and theme format 2.
+The bundled Classic, Paper and Terminal themes need no manifest changes.
+For a vendored theme, adapt its CSS to the
+[format-2 contract](THEMES.md#write-a-theme), set its `theme.toml`
+`format_version` to `2`, and commit the changes on the publishing
+branch. Changing only the version number does not establish
+compatibility. Run `partlet theme check --repo /path/to/source` and
+preview before publishing. Format-1 packs are rejected before
+publication writes.
+
+Complete a successful publication with the updated Partlet before using
+its `unpublish` command on an existing site. Publication writes the new
+stored theme metadata needed to rebuild the index without source files.
+The new removal command rejects old stored theme metadata before
+deleting project data; if it reports `invalid stored site theme`,
+publish with the updated version first, then retry removal. Do not
+delete stored metadata or recreate the bucket to work around that check.
 
 ## Moving from the checkout-based instructions
 

@@ -232,11 +232,11 @@ def test_theme_applies_to_every_rendered_page_and_site_index():
     assert pages["raw/src/example.py"] == b"print('hello')\n"
 
 
-def test_legacy_renderer_keeps_legacy_stylesheet():
+def test_default_renderer_uses_shared_stylesheet():
     assert b'href="/_partlet/style.css"' in render_site_index(
         "https://partlet.example", []
     )
-    assert b"data-mode=" not in render_site_index("https://partlet.example", [])
+    assert b'data-mode="auto"' in render_site_index("https://partlet.example", [])
 
 
 def test_manifest_without_theme_gets_default_layout_and_color_preference():
@@ -267,7 +267,7 @@ def test_page_landmarks_and_skip_link_work_on_index_tree_and_file():
         pages["blob/src/main.py"],
     ):
         assert b'href="#content">Skip to content</a>' in page
-        assert b'<main id="content" tabindex="-1">' in page
+        assert b'<main id="content" tabindex="-1"' in page
         assert b'<header class="top">' in page
         assert b'<footer class="site-footer">' in page
     assert b"<h1>foo</h1>" in pages["index.html"]

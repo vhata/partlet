@@ -15,7 +15,7 @@ readable README pages. The layout adapts to narrow screens and uses
 system fonts without JavaScript or external font downloads.
 
 Existing sites receive the updated layout on their next successful
-publication with the updated Partlet version. Exported Git history and
+publication with the updated renderer revision. Exported Git history and
 approval pins do not change. To see the default locally, leave the theme
 table out of your manifest and run:
 
@@ -61,11 +61,11 @@ Theme-only changes rebuild pages even when project history is unchanged;
 they do not require new history approval. An invalid theme stops the
 operation before publication instead of silently falling back.
 
-If you already run a public site, update its Worker to the matching
-Partlet version **before publishing themed pages**: older Workers do not
-serve the new theme resource URLs. Installing or selecting a theme does
-not deploy your Worker. Follow the existing
-[upgrade procedure](INSTALLATION.md#upgrades).
+When updating Partlet for an existing site, follow the general
+[upgrade procedure](INSTALLATION.md#upgrades) for the publisher, Worker,
+Action pin and republication. It also covers the format-2 migration and
+stored metadata required before removing projects. Selecting a theme
+does not itself upgrade or deploy Partlet.
 
 ## Install a third-party theme
 
@@ -136,13 +136,13 @@ my-theme/
   assets/       # optional declared raster images
 ```
 
-The root metadata table uses theme format version 1:
+The root metadata table uses theme format version 2:
 
 ```toml
 id = "my-theme"
 name = "My theme"
 version = "1.0.0"
-format_version = 1
+format_version = 2
 modes = ["auto", "light", "dark"]
 license = "MIT"
 assets = ["assets/pattern.png"]
@@ -158,12 +158,12 @@ PNG, JPEG (`.jpg` or `.jpeg`), GIF or WebP with lowercase extensions.
 Path segments begin with an ASCII letter, digit, underscore or hyphen
 and otherwise contain only those characters and dots. Nested directories
 inside `assets/` are allowed; empty segments and dot segments are not.
-SVG, HTML, JavaScript and custom fonts are outside format version 1.
+SVG, HTML, JavaScript and custom fonts are outside format version 2.
 Reference declared images relative to `style.css`, for example
 `url("assets/pattern.png")`; the published directory layout preserves
 that relationship.
 
-Format 1 refuses `@import`, `@font-face`, CSS backslash escapes and
+Format 2 refuses `@import`, `@font-face`, CSS backslash escapes and
 undeclared local image references. Use `url()` for image references;
 alternative image functions (`image-set()`, `-webkit-image-set()`,
 `image()` and `src()`) are unsupported. Use literal Unicode text when
@@ -188,7 +188,7 @@ The complete [Copper stylesheet](../examples/themes/copper/style.css)
 also overrides link, muted, code-background and focus colors. Set those
 coherently; changing the page background alone can make text unreadable.
 
-The stable format-1 tokens are:
+The stable format-2 tokens are:
 
 | Purpose | Variables |
 | -- | -- |
@@ -198,7 +198,7 @@ The stable format-1 tokens are:
 | Code colors | `--syntax-comment`, `--syntax-keyword`, `--syntax-string`, `--syntax-number`, `--syntax-name`, `--syntax-error` |
 
 `--surface` colors panels and the header. It defaults to `var(--bg)` so
-existing themes retain their own background colors.
+panels follow the selected background colors.
 
 Use system font stacks. Theme CSS follows Partlet's structural and code
 styles so matching selectors override their defaults. Stable styling
@@ -219,11 +219,59 @@ their appearance. Old theme resources accumulate in storage; this
 version does not automatically collect them. Reusing the same inputs
 reuses the same resource namespace.
 
-The legacy stylesheet remains available for earlier pages.
-Worker-generated 404 pages keep legacy styling. Removing a project
+The default stylesheet route serves the same Classic layout for Worker
+404 pages and rendering without an explicit theme. Removing a project
 rebuilds the index using the stored site presentation; it does not
 require the theme's local source directory or change the surviving
 site's theme.
 
 The renderer uses [version-1 page models](PAGE_MODELS.md) internally.
-Semantic HTML and theme format 2 remain a separate implementation step.
+Output version 1 and theme format 2 are the supported combination.
+Format-1 packs fail validation before any publication writes. There are
+no compatibility adapters.
+
+## Semantic output version 1
+
+The root `html` exposes `data-partlet-page` (`index`, `tree`, `blob`)
+and `data-partlet-output-version="1"`. `data-theme` selects the pack ID
+and `data-mode` selects `auto`, `light`, or `dark`. These hooks, the
+tokens above, and the semantic regions below form the supported
+baseline. Incidental wrappers and whitespace are not a compatibility
+contract.
+
+| Region | Hook and value |
+| -- | -- |
+| Project row or project page main | `data-partlet-project`: public project name |
+| Exported revision | `code[data-partlet-revision]`: complete opaque exported commit ID; visible text is abbreviated |
+| Exported tip committer date | `time[datetime]`: exact ISO timestamp with timezone; visible date is YYYY-MM-DD |
+| Entry row or blob content section | `data-partlet-entry-kind`: `directory`, `file`, or `symlink`; `data-partlet-path`: project-relative path |
+| Blob size | `data[value]`: decimal byte count; visible text uses B, KiB, or MiB |
+| README | `article.readme`: sanitized Markdown or escaped plaintext |
+| Source | `.hl`: focusable scrolling region; `.linenos`: inline line numbers; `#L-N`: addressable source line N |
+
+Directory sizes are absent; empty files have value `0`. Symlink sizes
+count target bytes, never followed filesystem content. Dates describe
+the exported tip, not publication time or individual file modification.
+Nested directories and blobs expose the same project revision and date.
+All values come from the [page models](PAGE_MODELS.md).
+
+Navigation, clone instructions, archive and raw links, README content,
+and source anchors work without CSS or JavaScript. Listings have named
+tables and scoped column headings; kind labels remain visible without
+CSS. Preserve these meanings when styling. Removing or changing a hook,
+field meaning, or required value requires a new output version; breaking
+the theme contract requires a new theme format. Optional additions with
+explicit absence semantics can retain output version 1.
+
+`RENDERER_REVISION` in `publish.py` participates in build identity and
+must increase for rendering changes requiring regenerated pages, even
+when the output contract stays compatible. Rebuilds keep exported commit
+IDs and approval pins intact. Stored site presentation includes its
+theme format and is validated before source-free index rebuilding or
+removal. The existing read-only `/_partlet/index.json` project summary
+remains available for publication diagnostics; it is not page-model
+JSON.
+
+See the [semantic-site validation evidence](SEMANTIC_SITE_VALIDATION.md)
+for representative screenshots, exercised scenarios and local evidence
+limits.

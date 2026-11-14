@@ -26,6 +26,7 @@ from partlet.site.render import (
     site_stylesheet,
 )
 from partlet.site.themes import (
+    FORMAT_VERSION,
     ResolvedTheme,
     ThemePresentation,
     resolve_theme,
@@ -105,13 +106,17 @@ def project_prefix(source: str, name: str) -> str:
     return f"{source}/p/{name}"
 
 
+# Bump for renderer changes requiring regeneration, independently of model versions.
+RENDERER_REVISION = 1
+
+
 def build_id(
     tip: str, description: str, base_url: str, theme_digest: str | None = None
 ) -> str:
     if theme_digest is None:
         theme_digest = resolve_theme().digest
     digest = hashlib.sha256(
-        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}\0{theme_digest}".encode()
+        f"{tip}\0{description}\0{base_url}\0{__version__}\0{SITE_LAYOUT}\0{RENDERER_REVISION}\0{theme_digest}".encode()
     )
     return digest.hexdigest()[:16]
 
@@ -361,11 +366,18 @@ def _stored_theme(store: Store, source: str) -> ThemePresentation | None:
         return None
     try:
         record = json.loads(raw)
-        if not isinstance(record, dict) or set(record) != {"name", "mode", "digest"}:
+        if not isinstance(record, dict) or set(record) != {
+            "name",
+            "mode",
+            "digest",
+            "format_version",
+        }:
             raise ValueError("invalid presentation fields")
         name, mode, digest = (record[key] for key in ("name", "mode", "digest"))
         if (
-            not isinstance(name, str)
+            record["format_version"] != FORMAT_VERSION
+            or type(record["format_version"]) is not int
+            or not isinstance(name, str)
             or not NAME_RE.fullmatch(name)
             or mode not in ("auto", "light", "dark")
             or not isinstance(digest, str)
@@ -383,8 +395,7 @@ def write_site_index(
     presentation = theme if theme is not None else _stored_theme(store, site.source)
     if theme is not None:
         _upload_theme(store, site, theme)
-    # Keep this route permanently Classic for cached legacy pages and the
-    # Worker's built-in 404, independent of the selected site theme.
+    # The Worker error page needs a source-independent default stylesheet.
     store.put(
         f"{site.source}/static/style.css", site_stylesheet(), "text/css; charset=utf-8"
     )
@@ -409,7 +420,12 @@ def write_site_index(
         _put_json(
             store,
             f"{site.source}/site-theme.json",
-            {"name": theme.name, "mode": theme.mode, "digest": theme.digest},
+            {
+                "name": theme.name,
+                "mode": theme.mode,
+                "digest": theme.digest,
+                "format_version": FORMAT_VERSION,
+            },
         )
     _put_json(store, f"{site.source}/index.json", projects)
     store.put(

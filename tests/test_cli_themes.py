@@ -18,7 +18,7 @@ def write_theme(mono, directory="themes/custom"):
     mono.write(
         f"{directory}/theme.toml",
         'id = "custom"\nname = "Custom theme"\nversion = "1.0"\n'
-        'format_version = 1\nmodes = ["auto", "light", "dark"]\n'
+        'format_version = 2\nmodes = ["auto", "light", "dark"]\n'
         'license = "MIT"\nassets = []\n',
     )
     mono.write(f"{directory}/style.css", ":root { --link: #123456; }\n")

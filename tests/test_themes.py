@@ -12,7 +12,7 @@ from partlet.site.themes import BUILTIN_THEMES, ThemeError, resolve_theme
 METADATA = """id = "ocean"
 name = "Ocean"
 version = "1.0.0"
-format_version = 1
+format_version = 2
 modes = ["auto", "light", "dark"]
 license = "MIT"
 assets = []
@@ -184,8 +184,8 @@ def test_clean_check_rejects_local_symlink_without_reading_target(tmp_path):
 @pytest.mark.parametrize(
     "old, new, message",
     [
-        ("format_version = 1", "format_version = 2", "format_version"),
-        ("format_version = 1", "format_version = true", "format_version"),
+        ("format_version = 2", "format_version = 1", "format_version"),
+        ("format_version = 2", "format_version = true", "format_version"),
         ('id = "ocean"', 'id = "Bad name"', "lowercase stable identifier"),
         ('name = "Ocean"', 'name = ""', "non-empty string"),
         ('version = "1.0.0"', "version = 1", "non-empty string"),
