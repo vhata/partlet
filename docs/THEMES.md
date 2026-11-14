@@ -224,3 +224,6 @@ Worker-generated 404 pages keep legacy styling. Removing a project
 rebuilds the index using the stored site presentation; it does not
 require the theme's local source directory or change the surviving
 site's theme.
+
+The renderer uses [version-1 page models](PAGE_MODELS.md) internally.
+Semantic HTML and theme format 2 remain a separate implementation step.

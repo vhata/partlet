@@ -1,31 +1,30 @@
 {% extends "base.html" %}
-{% block title %}{{ project.name }}{% if directory %}/{{ directory }}{% endif %}{% endblock %}
+{% block title %}{{ page.project.name }}{% if page.path %}/{{ page.path }}{% endif %}{% endblock %}
 {% block main %}
-<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Projects</a><span aria-hidden="true">/</span>{% for label, url in crumbs %}<a href="{{ url }}"{% if loop.last %} aria-current="page"{% endif %}>{{ label }}</a>{% if not loop.last %}<span aria-hidden="true">/</span>{% endif %}{% endfor %}</nav>
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Projects</a><span aria-hidden="true">/</span>{% for crumb in page.breadcrumbs %}<a href="{{ crumb.url }}"{% if loop.last %} aria-current="page"{% endif %}>{{ crumb.label }}</a>{% if not loop.last %}<span aria-hidden="true">/</span>{% endif %}{% endfor %}</nav>
 <div class="page-heading project-heading">
-  <p class="eyebrow">{{ 'Directory' if directory else 'Repository' }}</p>
-  <h1>{{ crumbs[-1][0] }}</h1>
-  {% if not directory and project.description %}<p class="description intro">{{ project.description }}</p>{% endif %}
+  <p class="eyebrow">{{ 'Directory' if page.path else 'Repository' }}</p>
+  <h1>{{ page.breadcrumbs[-1].label }}</h1>
+  {% if not page.path and page.project.description %}<p class="description intro">{{ page.project.description }}</p>{% endif %}
 </div>
-{% if not directory %}
+{% if not page.path %}
 <section class="project panel" aria-labelledby="clone-heading">
   <div class="clone-details">
     <h2 id="clone-heading">Clone this repository</h2>
-    <pre class="clone" tabindex="0"><code>git clone {{ clone_url }}</code></pre>
+    <pre class="clone" tabindex="0"><code>git clone {{ page.project.clone_url }}</code></pre>
   </div>
   <div class="project-details">
-    <p class="downloads"><span class="meta-label">Download source</span>{% for fmt, url in archives %}<a class="button" href="{{ url }}">{{ fmt }}</a>{% endfor %}</p>
-    <p class="tip"><span class="meta-label">Latest commit</span><code>{{ project.tip[:12] }}</code>{% if project.updated %}<span class="commit-date">Updated <time datetime="{{ project.updated }}" title="{{ project.updated }}">{{ project.updated[:10] }}</time></span>{% endif %}</p>
+    <p class="downloads"><span class="meta-label">Download source</span>{% for archive in page.project.archives %}<a class="button" href="{{ archive.url }}">{{ archive.format }}</a>{% endfor %}</p>
+    <p class="tip"><span class="meta-label">Latest commit</span><code>{{ page.project.revision[:12] }}</code>{% if page.project.updated_at %}<span class="commit-date">Updated <time datetime="{{ page.project.updated_at }}" title="{{ page.project.updated_at }}">{{ page.project.updated_at[:10] }}</time></span>{% endif %}</p>
   </div>
 </section>
 {% endif %}
 <section class="panel file-browser" aria-labelledby="files-heading">
-<div class="section-heading"><h2 id="files-heading">Files</h2><span class="count">{{ (subdirs | length) + (files | length) }} {{ 'entry' if (subdirs | length) + (files | length) == 1 else 'entries' }}</span></div>
-{% if subdirs or files %}
+<div class="section-heading"><h2 id="files-heading">Files</h2><span class="count">{{ page.entries | length }} {{ 'entry' if page.entries | length == 1 else 'entries' }}</span></div>
+{% if page.entries %}
 <table class="listing" aria-label="Files and directories">
 <tbody>
-{% for name, url in subdirs %}<tr><td class="dir"><a href="{{ url }}">{{ name }}/</a></td><td></td></tr>
-{% endfor %}{% for name, url, size in files %}<tr><td class="file"><a href="{{ url }}">{{ name }}</a></td><td class="size">{{ size }}</td></tr>
+{% for entry in page.entries %}<tr><td class="{{ 'dir' if entry.kind == 'directory' else 'file' }}"><a href="{{ entry.url }}">{{ entry.name }}{{ '/' if entry.kind == 'directory' else '' }}</a></td><td{% if entry.size_bytes is not none %} class="size"{% endif %}>{% if entry.size_bytes is not none %}{{ entry.size_bytes | human_size }}{% endif %}</td></tr>
 {% endfor %}
 </tbody>
 </table>
@@ -33,5 +32,5 @@
 <div class="empty-state"><p>This repository has no files at this revision.</p></div>
 {% endif %}
 </section>
-{% if readme_html %}<section class="panel readme-panel" aria-label="README"><div class="section-heading"><h2>README</h2></div><article class="readme">{{ readme_html | safe }}</article></section>{% endif %}
+{% if page.readme_html %}<section class="panel readme-panel" aria-label="README"><div class="section-heading"><h2>README</h2></div><article class="readme">{{ page.readme_html }}</article></section>{% endif %}
 {% endblock %}

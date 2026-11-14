@@ -7,16 +7,16 @@
   <p class="intro">Browse the code, read the docs, and take a copy.</p>
 </div>
 <section class="panel" aria-labelledby="projects-heading">
-  <div class="section-heading"><h2 id="projects-heading">All projects</h2><span class="count">{{ projects | length }} {{ 'project' if projects | length == 1 else 'projects' }}</span></div>
-  {% if projects %}
+  <div class="section-heading"><h2 id="projects-heading">All projects</h2><span class="count">{{ page.projects | length }} {{ 'project' if page.projects | length == 1 else 'projects' }}</span></div>
+  {% if page.projects %}
   <table class="listing projects" aria-label="Published projects">
     <tbody>
-    {% for p in projects %}
+    {% for p in page.projects %}
     <tr>
-      <td class="project-name"><a href="/{{ p.name }}">{{ p.name }}</a><span class="project-label">Repository</span></td>
+      <td class="project-name"><a href="{{ p.url }}">{{ p.name }}</a><span class="project-label">Repository</span></td>
       <td class="description">{{ p.description }}</td>
-      <td class="revision"><span class="meta-label">Latest commit</span><code>{{ p.tip[:12] }}</code></td>
-      <td class="updated">{% if p.updated %}<span class="meta-label">Updated</span><time datetime="{{ p.updated }}" title="{{ p.updated }}">{{ p.updated[:10] }}</time>{% endif %}</td>
+      <td class="revision"><span class="meta-label">Latest commit</span><code>{{ p.revision[:12] }}</code></td>
+      <td class="updated">{% if p.updated_at %}<span class="meta-label">Updated</span><time datetime="{{ p.updated_at }}" title="{{ p.updated_at }}">{{ p.updated_at[:10] }}</time>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

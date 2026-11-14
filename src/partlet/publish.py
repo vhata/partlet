@@ -19,8 +19,8 @@ from partlet.gitutil import GitError, git, git_out
 from partlet.history import HistoryError, check_history
 from partlet.manifest import NAME_RE, Manifest, Project, Site, parse_manifest
 from partlet.scan import ScanError, Scanner
+from partlet.site.build import build_project, project_from_record
 from partlet.site.render import (
-    ProjectInfo,
     render_project,
     render_site_index,
     site_stylesheet,
@@ -192,7 +192,7 @@ def publish_project(
         # publisher, and before any uploads or pointer changes.
         entries = read_tree(repo, tip)
         updated = git_out("show", "-s", "--format=%cI", tip, cwd=repo)
-        info = ProjectInfo(
+        info = build_project(
             project.name, project.description, tip, site.base_url, updated
         )
         rendered = render_project(info, entries, theme)
@@ -393,6 +393,7 @@ def write_site_index(
         try:
             current = _read_json(store, f"{project_prefix(site.source, name)}/current")
             if current:
+                project_from_record(site.base_url, current)
                 projects.append(
                     {k: current[k] for k in ("name", "description", "tip", "updated")}
                 )
