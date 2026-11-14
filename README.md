@@ -80,7 +80,8 @@ or change tracked files. You can remove the Partlet checkout afterward.
 Omit `--publisher-only` to install the Worker tools too; this requires
 Node/npm as described in the [installation guide](docs/INSTALLATION.md).
 That guide also covers installing directly from GitHub or a wheel,
-dependency locations, upgrades, and multiple deployments.
+dependency locations and multiple deployments. For an existing
+installation, see [Upgrading Partlet](docs/UPGRADING.md).
 
 ### 2. Choose a project
 
@@ -91,6 +92,9 @@ Create `partlet.toml` at the root of your **source repository**:
 source = "my-monorepo"
 base_url = "https://code.example.com"
 branch = "main"
+name = "My projects"
+# tagline = "Tools and experiments"
+# readme = "public/home.md"
 
 [projects.foo]
 path = "tools/foo"
@@ -104,6 +108,15 @@ including a `workers.dev` address if you do not own a domain. `foo`
 becomes the public URL name; `source` is a stable internal storage name
 for your monorepo. Use lowercase names without spaces. Add another
 `[projects.NAME]` table for each additional project.
+
+The optional `name` is your site's display name; without it, the header
+uses the URL hostname. You can add footer text with `tagline` and an
+introduction with `readme`. Start from the
+[commented example manifest](examples/partlet.toml), and follow
+[Configure your site](docs/SITE.md) to select, commit and preview public
+homepage Markdown. The homepage file is published independently of
+project approvals and is not secret-scanned; no root README is selected
+automatically. Keep these settings in `[site]`, before any other table.
 
 The selected directory must already be committed on the local `main`
 branch (or the branch you set above). Partlet reads that branch's
@@ -123,14 +136,16 @@ partlet preview --repo "$SOURCE_REPO"
 
 Open `http://127.0.0.1:8787/`. No Cloudflare account, deployment config,
 or publication approval is needed. Preview includes every configured
-project and the selected theme, using committed history from
-`site.branch` and your current manifest. Uncommitted source and vendored
-theme edits are not included. Clone URLs point to the local server.
+project, site identity, selected homepage introduction and theme, using
+committed content from `site.branch` and your current manifest.
+Uncommitted source, homepage and vendored theme edits are not included.
+Clone URLs point to the local server.
 
 Stop with Ctrl-C; temporary output is removed and approvals stay
 unchanged. Rerun the command after changing the manifest or committing
 source changes. Add `--port 8788` to use another port, or `--scan` to
-check exported history for secrets before serving. See the
+check exported project history for secrets before serving; it does not
+scan the homepage introduction. See the
 [Worker guide](worker/README.md#preview-your-site) for details.
 
 ### 4. Review and approve the first export
@@ -181,6 +196,12 @@ and push the approval. To move a project or change author mapping,
 [review the changed export](docs/PUBLISHING.md#review-and-approval)
 before pushing the new configuration.
 
+To change your site's name, footer or introduction, follow
+[Configure your site](docs/SITE.md). Commit and publish those changes;
+no Worker deployment or renewed project approval is needed.
+Homepage-only changes can update the index while projects report
+`unchanged`.
+
 To stop publishing a project, removing its manifest entry stops updates
 but leaves the existing public copy available. Follow the
 [removal instructions](docs/PUBLISHING.md#removing-a-project) to delete
@@ -189,12 +210,16 @@ that copy too. If a macOS clone hangs, see
 
 ## More documentation
 
+- [Configure your site](docs/SITE.md): name, footer, homepage Markdown,
+  examples, preview and everyday edits.
 - [Site themes](docs/THEMES.md): choose Classic, Paper or Terminal, or
   install a third-party CSS theme in your source repository.
 - [Publish your first site](docs/GETTING_STARTED.md): Cloudflare and
   GitHub setup, then first-clone verification.
-- [Installation and upgrades](docs/INSTALLATION.md): installed tools,
-  independent deployment configs, and migration from an edited checkout.
+- [Installation](docs/INSTALLATION.md): installed tools, site settings
+  and independent deployment configs.
+- [Upgrading Partlet](docs/UPGRADING.md): update published sites and
+  migrate from an edited checkout.
 - [Publishing reference](docs/PUBLISHING.md): manifest fields, CLI and
   Action options, history changes, removal, and recovery.
 - [Worker guide](worker/README.md): local previews and HTTP behavior.

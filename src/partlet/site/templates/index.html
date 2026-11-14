@@ -2,10 +2,9 @@
 {% block title %}Projects{% endblock %}
 {% block main %}
 <div class="page-heading">
-  <p class="eyebrow">Public repositories</p>
   <h1>Projects</h1>
-  <p class="intro">Browse the code, read the docs, and take a copy.</p>
 </div>
+{% if page.intro_html is not none %}<article class="readme homepage">{{ page.intro_html }}</article>{% endif %}
 <section class="panel" aria-labelledby="projects-heading">
   <div class="section-heading"><h2 id="projects-heading">All projects</h2><span class="count">{{ page.projects | length }} {{ 'project' if page.projects | length == 1 else 'projects' }}</span></div>
   {% if page.projects %}

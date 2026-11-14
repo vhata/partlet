@@ -13,6 +13,12 @@ class Archive:
 
 
 @dataclass(frozen=True)
+class SiteIdentity:
+    name: str
+    tagline: str = ""
+
+
+@dataclass(frozen=True)
 class Project:
     name: str
     description: str
@@ -41,6 +47,8 @@ class Entry:
 @dataclass(frozen=True)
 class IndexPage:
     projects: tuple[Project, ...]
+    intro_html: Markup | None = None
+    identity: SiteIdentity = field(default_factory=lambda: SiteIdentity("Projects"))
     output_version: Literal[1] = field(default=1, init=False)
     kind: Literal["index"] = field(default="index", init=False)
 
@@ -52,6 +60,7 @@ class TreePage:
     breadcrumbs: tuple[Breadcrumb, ...]
     entries: tuple[Entry, ...]
     readme_html: Markup | None
+    identity: SiteIdentity = field(default_factory=lambda: SiteIdentity("Projects"))
     output_version: Literal[1] = field(default=1, init=False)
     kind: Literal["tree"] = field(default="tree", init=False)
 
@@ -65,5 +74,6 @@ class BlobPage:
     symlink_target: str | None
     content_state: Literal["source", "symlink", "unavailable"]
     source_html: Markup | None
+    identity: SiteIdentity = field(default_factory=lambda: SiteIdentity("Projects"))
     output_version: Literal[1] = field(default=1, init=False)
     kind: Literal["blob"] = field(default="blob", init=False)

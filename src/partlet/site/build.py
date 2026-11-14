@@ -19,6 +19,7 @@ from partlet.site.models import (
     Entry,
     IndexPage,
     Project,
+    SiteIdentity,
     TreePage,
 )
 from partlet.site.tree import FileEntry, is_viewable
@@ -73,15 +74,26 @@ def project_from_record(base_url: str, record: Mapping[str, object]) -> Project:
     )
 
 
-def build_index(base_url: str, records: Sequence[Mapping[str, object]]) -> IndexPage:
+def build_index(
+    base_url: str,
+    records: Sequence[Mapping[str, object]],
+    identity: SiteIdentity | None = None,
+) -> IndexPage:
     return IndexPage(
         tuple(
             sorted(
                 (project_from_record(base_url, r) for r in records),
                 key=lambda p: p.name,
             )
-        )
+        ),
+        identity=identity or SiteIdentity(_site_hostname(base_url)),
     )
+
+
+def _site_hostname(base_url: str) -> str:
+    from urllib.parse import urlsplit
+
+    return urlsplit(base_url).hostname or base_url
 
 
 def _directories(

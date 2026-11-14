@@ -41,12 +41,23 @@ def test_defaults():
         '[site]\nsource = "s"\nbase_url = "https://x"\n[projects.bar]\npath = "bar"\n'
     )
     assert m.site.branch == "main"
+    assert m.site.name == "x"
+    assert m.site.tagline == ""
     assert m.site.mailmap is None
     bar = m.projects["bar"]
     assert bar.previous_paths == ()
     assert bar.description == ""
     assert bar.approved is None
     assert bar.allow_rewrite_of is None
+
+
+def test_site_identity_configuration():
+    site = parse_manifest(
+        '[site]\nsource = "s"\nbase_url = "https://example.test/path"\n'
+        'name = "<My site>"\ntagline = "A & B"\n'
+    ).site
+    assert site.name == "<My site>"
+    assert site.tagline == "A & B"
 
 
 def test_no_projects_is_valid():

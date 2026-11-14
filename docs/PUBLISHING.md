@@ -12,12 +12,18 @@ needs your private repository or the publisher's write credentials.
 
 ## Manifest reference
 
-Keep `partlet.toml` at the root of your source repository. For example:
+Keep `partlet.toml` at the root of your source repository. A complete
+commented [example manifest](../examples/partlet.toml) is available to
+copy. For site appearance and homepage setup, follow
+[Configure your site](SITE.md). For example:
 
 ```toml
 [site]
 source = "my-source"
 base_url = "https://partlet.example.com"
+# name = "Example projects" # defaults to the base URL hostname
+# tagline = ""             # optional plain-text footer text
+# readme = "public/home.md" # explicit additional public Markdown input
 branch = "main"
 # mailmap = "public.mailmap"
 
@@ -37,6 +43,9 @@ branch.
 | -- | -- |
 | `site.source` | Required stable storage namespace for this monorepo. Match the Worker's `SOURCE` and workflow concurrency group. |
 | `site.base_url` | Required public site URL, including `https://`, used for links and clone URLs. |
+| `site.name` | Optional display name linked to the site root; defaults to the hostname in `site.base_url`. |
+| `site.tagline` | Optional plain text shown at the left of the footer; defaults to empty. |
+| `site.readme` | Optional committed source-repository-relative Markdown file for the homepage introduction; absent means no introduction. See the homepage policy below. |
 | `site.branch` | Source branch to export; defaults to `main`. It must exist locally. Match the workflow's push branch. |
 | `site.mailmap` | Optional path to an author/committer identity mapping file, relative to the source checkout. |
 | `site.theme.name` | Bundled theme: `classic` (default), `paper`, or `terminal`. Mutually exclusive with `site.theme.path`. |
@@ -72,10 +81,12 @@ update that writes project content is scanned for secrets first. An
 unchanged run can return without repeating the scan.
 
 To keep something private, keep it outside the declared project paths
-and their history. Files deleted years ago, commit messages and author
+and their history, and out of explicitly selected public inputs such as
+`site.readme`. Files deleted years ago, commit messages and author
 identities can still be public. Secret scanning helps find credentials;
 it does not decide whether all the historical content is suitable for
-publication.
+publication. The [homepage policy](#site-identity-and-homepage) has a
+separate approval and scanning boundary.
 
 Re-run review when adding a project, changing exported paths or changing
 identity mappings. To move `tools/foo` to `packages/foo`, set the new
@@ -152,7 +163,7 @@ an existing site.
 The installed tool also provides `partlet setup [--worker]` for explicit
 dependency installation, and `partlet worker` commands for independent
 Wrangler configurations, local preview, and user-run deployment. See
-[installation and upgrades](INSTALLATION.md) and the
+[installation](INSTALLATION.md), [upgrades](UPGRADING.md) and the
 [first-site guide](GETTING_STARTED.md). These commands do not use the
 publisher's `--manifest` option or R2 write credentials.
 
@@ -301,7 +312,7 @@ fingerprints when it appears in both an original commit and a merge.
 ## Removing a project
 
 After upgrading Partlet, complete the
-[applicable migration](INSTALLATION.md#semantic-output-version-1-migration)
+[applicable migration](UPGRADING.md#semantic-output-version-1-migration)
 before removing a project. The semantic-output upgrade requires a
 successful publication to update stored theme metadata first.
 
@@ -461,3 +472,48 @@ The upgraded package meets the
 for the verified client; the temporary workaround alone does not. Other
 Git/library combinations need their own verification. Local HTTP smoke
 tests do not cover Cloudflare's HTTP/2 connection behavior.
+
+## Site identity and homepage
+
+For a step-by-step setup, example Markdown, preview instructions and
+editing/removal tasks, see [Configure your site](SITE.md). This section
+defines the input and publication rules.
+
+`site.name` sets the linked header name; its default is the hostname in
+`site.base_url`. `site.tagline` is optional plain text in the footer,
+empty by default. Both values are escaped, never interpreted as HTML.
+
+Set `site.readme = "public/home.md"` to render an introduction above the
+project list. This is an explicit additional public input, outside the
+project exports. Selecting the file authorizes publication of its
+current committed contents independently of project approvals, even when
+no projects are approved or configured. Later committed edits are
+published without a new project approval. Homepage content is not passed
+through project secret scanning: neither production publication nor
+`build --scan` or `preview --scan` scans this file. Review it for
+secrets and other private material before selecting it and before
+publishing changes. No root README is automatically selected. The file
+must be committed on `site.branch`, be UTF-8 regular Markdown (`.md` or
+`.markdown`), and use a path relative to the source repository, without
+absolute paths, traversal or symlinks. Builds and previews read
+committed bytes; production also refuses dirty input files. An absent
+setting means no introduction.
+
+Homepage Markdown uses the same inert renderer as project READMEs. Raw
+HTML is escaped and script URLs are suppressed. Links and images may use
+public root-relative URLs, fragments, or absolute HTTP(S) URLs; links
+also allow `mailto:`. Use HTTPS for external images: the Worker blocks
+external HTTP images. Fragment links need an existing target; Markdown
+headings do not receive automatic IDs. Protocol-relative and ambiguous
+relative references are rejected with an actionable error. Rewrite them
+to public URLs. Partlet never follows those references to copy private
+files or assets.
+
+Identity changes regenerate project pages without changing exported Git
+history or approval pins. Homepage-only edits regenerate the index; they
+do not rebuild unchanged project pages. Publication stores only the
+public display strings and rendered introduction, never its source path.
+Removal and index recovery use this validated durable presentation even
+when the source file is unavailable or the local configuration changes.
+During partial publication, failed projects retain their previous pages
+and identity while the index adopts the selected site presentation.
