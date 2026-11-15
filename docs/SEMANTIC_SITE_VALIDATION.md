@@ -71,3 +71,19 @@ CLI-to-Worker scenarios. Queue, link and PR-marker checks also passed.
 Local Node checks used the available 24.19.0 runtime; the repository
 pins 24.22.0, which was not found locally. Setup used the available npm
 11.20.0. No global tool or repository pin was changed.
+
+## Site identity and optional homepage
+
+The identity/homepage change was checked with synthetic long names,
+taglines and Markdown prose across Classic, Paper, Terminal and Copper,
+explicit light/dark modes, 390/1440-pixel widths and intro on/off. All
+32 headless Chromium checks passed without horizontal page overflow.
+Each checked keyboard focus on the skip link followed by the home header
+link. JavaScript was disabled. Requests were fulfilled from renderer
+maps with no server or external requests. Screenshots and the
+reproducible harness are retained in `.docket/identity-browser/` in the
+implementation worktree. A representative narrow Paper screenshot was
+visually inspected. The wheel built through the source distribution
+produced byte-identical fixture maps. This is local presentation/package
+evidence, not hosted, private-data, cross-browser, contrast or
+screen-reader acceptance.

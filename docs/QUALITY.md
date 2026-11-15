@@ -9,9 +9,11 @@ gates as they exist now; history and rationale for past changes live in
 - Published history is stable: the same monorepo history and manifest
   always export to the same commit hashes, and nothing already published
   is rewritten without explicit approval.
-- Privacy: nothing outside a project's declared paths reaches the public
-  store, and the public Worker never holds credentials for the private
-  repository.
+- Privacy: publication includes only declared project paths and
+  explicitly selected public presentation inputs. Homepage content has
+  its own
+  [publication boundary](PUBLISHING.md#site-identity-and-homepage). The
+  public Worker never holds credentials for the private repository.
 - A plain `git clone` and `git pull` work against the published site
   with no client configuration.
 - Rendered pages never execute content from the published repository (no

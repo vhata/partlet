@@ -189,7 +189,7 @@ partlet worker deploy --config "$PARTLET_SITE/wrangler.toml"
 The real deployment identifies its billable target and asks for
 confirmation. A dry run bundles locally and does not deploy. Installed
 tool upgrades preserve this config; upgrading the hosted Worker requires
-an explicit deployment. See [upgrades](INSTALLATION.md#upgrades).
+an explicit deployment. See [upgrades](UPGRADING.md#upgrade-a-site).
 
 Wrangler prints the deployed URL and R2 binding in the terminal. Check
 that they match your choices. In your source repository's
@@ -200,9 +200,7 @@ pages and clone links. Use it wherever the rest of this guide shows
 `https://code.example.com`.
 
 The site has no content until the first publish; a 404 at this point is
-expected. For an upgrade from an older deployment, wait at least 60
-seconds after deploying before publishing so old cached Git metadata can
-expire.
+expected.
 
 ## 3. Give the publisher access to its bucket
 
@@ -298,6 +296,13 @@ For a jurisdiction-specific bucket, set the Action's optional `endpoint`
 input to its matching S3 endpoint. Further options are in the
 [Action reference](PUBLISHING.md#github-action).
 
+Before publishing, check the optional [site settings](SITE.md): the
+header name, footer text and homepage introduction. If you selected
+`site.readme`, review that file for private content and commit it on the
+publishing branch too. It is not covered by project approval or secret
+scanning. Preview reads its committed contents; check the homepage and
+its links before pushing.
+
 Commit `partlet.toml` (including the `approved` hash) and the workflow
 on your publishing branch, then push. If your repository requires pull
 requests, merge those files through your usual process. For example, on
@@ -306,6 +311,8 @@ a repository where direct pushes are allowed:
 ```bash
 git -C "$SOURCE_REPO" switch main
 git -C "$SOURCE_REPO" add partlet.toml .github/workflows/partlet.yml
+# If selected and not already committed, also stage your homepage file:
+# git -C "$SOURCE_REPO" add public/home.md
 git -C "$SOURCE_REPO" commit -m 'Publish foo with Partlet'
 git -C "$SOURCE_REPO" push origin main
 ```
@@ -318,9 +325,12 @@ failed scan or history check explains why publication was blocked.
 
 ## 5. Check the result
 
-Open `https://code.example.com/` and follow the `foo` link. Browse a
-directory and file, try a raw download, and download an archive. From a
-directory outside your source checkout:
+Open `https://code.example.com/`. Check the site name, optional footer
+text and introduction; test any homepage links. The Partlet attribution
+should open its project page. Follow the `foo` link and check the site
+name and footer there too. Browse a directory and file, try a raw
+download, and download an archive. From a directory outside your source
+checkout:
 
 ```bash
 git clone https://code.example.com/foo partlet-public-check

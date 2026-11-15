@@ -14,6 +14,8 @@ from partlet.manifest import Manifest
 from partlet.publish import build_id, project_prefix, write_site_index
 from partlet.scan import ScanError, Scanner
 from partlet.site.build import build_project
+from partlet.site.homepage import load_homepage
+from partlet.site.models import SiteIdentity
 from partlet.site.render import render_project
 from partlet.site.themes import ResolvedTheme
 from partlet.site.tree import read_tree
@@ -34,6 +36,7 @@ def build_preview(
     Every invocation starts from nothing; there is no public state to replace.
     """
     site = replace(manifest.site, base_url=f"http://127.0.0.1:{port}")
+    intro_html = load_homepage(repo, site)
     out = directory / "objects"
     out.mkdir()  # Refuse reuse, including a symlink to an existing store.
     store = LocalStore(out)
@@ -53,9 +56,12 @@ def build_preview(
         info = build_project(
             project.name, project.description, tip, site.base_url, updated
         )
-        pages = render_project(info, read_tree(exported, tip), theme)
+        identity = SiteIdentity(site.name, site.tagline)
+        pages = render_project(info, read_tree(exported, tip), theme, identity)
         prefix = project_prefix(site.source, project.name)
-        build = build_id(tip, project.description, site.base_url, theme.digest)
+        build = build_id(
+            tip, project.description, site.base_url, theme.digest, identity
+        )
         store.validate_keys(f"{prefix}/site/{build}/{key}" for key in pages)
         for key, data in pages.items():
             store.put(f"{prefix}/site/{build}/{key}", data)
@@ -77,5 +83,5 @@ def build_preview(
             ).encode(),
         )
         print(f"{project.name:24} preview    {tip[:12]}", flush=True)
-    write_site_index(store, site, theme)
+    write_site_index(store, site, theme, intro_html)
     return out

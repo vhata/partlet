@@ -3,6 +3,7 @@
 from html.parser import HTMLParser
 
 from partlet.site.build import build_project
+from partlet.site.models import SiteIdentity
 from partlet.site.render import render_project, render_site_index
 from partlet.site.tree import SIZE_CAP, FileEntry
 
@@ -48,6 +49,7 @@ def test_every_page_exposes_public_values_and_accessible_structure():
                 "updated": stamp,
             }
         ],
+        identity=SiteIdentity('Site <& "name">', '<Tag & "line">'),
     )
     for key, html in pages.items():
         if key.startswith("raw/"):
@@ -84,6 +86,13 @@ def test_every_page_exposes_public_values_and_accessible_structure():
             assert doc.find("data")[0]["value"] == str(len(entry.data))
             assert any("/raw/" in a.get("href", "") for a in doc.find("a"))
     root = Document(pages["index.html"])
+    assert not any(a.get("class") == "brand-mark" for _, a in root.elements)
+    assert not any(a.get("class") == "home-link" for _, a in root.elements)
+    assert b"Site &lt;&amp; &#34;name&#34;&gt;" in pages["site-index"]
+    assert b"&lt;Tag &amp; &#34;line&#34;&gt;" in pages["site-index"]
+    assert b'href="https://github.com/vhata/partlet"' in pages["site-index"]
+    assert b"Public repositories" not in pages["site-index"]
+    assert b"Browse the code" not in pages["site-index"]
     assert any(
         a.get("data-partlet-entry-kind") == "directory"
         and a["data-partlet-path"] == "docs"

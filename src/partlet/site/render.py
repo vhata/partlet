@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from jinja2 import Environment, PackageLoader, select_autoescape
+from markupsafe import Markup
 
 from partlet.site.build import build_index, build_pages
-from partlet.site.models import BlobPage, IndexPage, Project, TreePage
+from partlet.site.models import BlobPage, IndexPage, Project, SiteIdentity, TreePage
 from partlet.site.themes import ThemePresentation, resolve_theme
 from partlet.site.tree import FileEntry
 
@@ -38,10 +41,15 @@ def render_page(
 
 
 def render_project(
-    project: Project, entries: list[FileEntry], theme: ThemePresentation | None = None
+    project: Project,
+    entries: list[FileEntry],
+    theme: ThemePresentation | None = None,
+    identity: SiteIdentity | None = None,
 ) -> dict[str, bytes]:
     out = {}
     for page in build_pages(project, entries):
+        if identity is not None:
+            page = replace(page, identity=identity)
         if isinstance(page, TreePage):
             tree_path = "/children/".join(page.path.split("/"))
             key = "index.html" if not page.path else f"tree/{tree_path}/index.html"
@@ -54,9 +62,15 @@ def render_project(
 
 
 def render_site_index(
-    base_url: str, projects: list[dict], theme: ThemePresentation | None = None
+    base_url: str,
+    projects: list[dict],
+    theme: ThemePresentation | None = None,
+    identity: SiteIdentity | None = None,
+    intro_html: Markup | None = None,
 ) -> bytes:
-    return render_page(build_index(base_url, projects), theme)
+    return render_page(
+        replace(build_index(base_url, projects, identity), intro_html=intro_html), theme
+    )
 
 
 def site_stylesheet() -> bytes:

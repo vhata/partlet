@@ -10,13 +10,12 @@
 <a class="skip-link" href="#content">Skip to content</a>
 <header class="top">
   <div class="top-inner">
-    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">p</span>Partlet</a>
-    <a class="home-link" href="/">Public repositories</a>
+    <a class="brand" href="/">{{ page.identity.name }}</a>
   </div>
 </header>
 <main id="content" tabindex="-1"{% if page.project is defined %} data-partlet-project="{{ page.project.name }}"{% endif %}>
 {% block main %}{% endblock %}
 </main>
-<footer class="site-footer"><span>Code, out in the open.</span> <span>Published with <a href="/">Partlet</a></span></footer>
+<footer class="site-footer">{% if page.identity.tagline %}<span>{{ page.identity.tagline }}</span>{% endif %}<span>Published with <a href="https://github.com/vhata/partlet">Partlet</a></span></footer>
 </body>
 </html>

@@ -1,0 +1,41 @@
+# Copy to partlet.toml at the root of your SOURCE repository, not the
+# Partlet checkout or the directory containing wrangler.toml.
+# Edit the URL, namespace and project paths before using this example.
+# Walkthrough: docs/SITE.md; full field reference: docs/PUBLISHING.md.
+
+[site]
+source = "my-monorepo"             # stable storage namespace; matches Worker SOURCE
+base_url = "https://code.example.com" # your public site URL
+branch = "main"                    # local branch containing committed public inputs
+name = "My projects"               # optional; default is the base_url hostname
+tagline = "Tools and experiments"   # optional plain text; default is no tagline
+
+# Optional homepage introduction above the automatic project list.
+# Copy examples/home.md to public/home.md in your source repository,
+# edit it, and commit it on the branch above before uncommenting this.
+# Selecting this file authorizes publication independently of project
+# approvals. It is NOT secret-scanned, even with --scan. Review every edit.
+# Use public /foo/ or https:// URLs; local files/images are not copied.
+# No root README is selected automatically. To remove the introduction,
+# comment out this setting and publish again; an empty path is invalid.
+# readme = "public/home.md"
+
+# Optional author identity mapping; see docs/PUBLISHING.md.
+# mailmap = "public.mailmap"
+
+# All site fields above must precede [site.theme] and [projects.foo].
+# name below is the THEME name, not the site's display name.
+[site.theme]
+name = "classic"                   # classic (default), paper, or terminal
+mode = "auto"                      # auto (default), light, or dark
+# For a committed third-party theme, replace name with path:
+# path = "themes/copper"
+
+[projects.foo]
+path = "tools/foo"                 # committed directory to export as /foo/
+description = "Foo command-line tool" # shown in the project list
+# previous_paths = ["old-tools/foo"] # former locations included in history
+# Run partlet review foo --first-publish to write approved; do not invent
+# or copy an approval hash. No project is published until approved.
+
+# Add another [projects.NAME] table for each public project.

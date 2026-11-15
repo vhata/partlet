@@ -14,7 +14,16 @@ from typing import Any
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]*")
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 
-SITE_KEYS = {"source", "branch", "base_url", "mailmap", "theme"}
+SITE_KEYS = {
+    "source",
+    "branch",
+    "base_url",
+    "name",
+    "tagline",
+    "readme",
+    "mailmap",
+    "theme",
+}
 PROJECT_KEYS = {"path", "previous_paths", "description", "approved", "allow_rewrite_of"}
 THEME_NAMES = ("classic", "paper", "terminal")
 THEME_MODES = ("auto", "light", "dark")
@@ -36,8 +45,19 @@ class Site:
     source: str
     branch: str
     base_url: str
+    name: str = ""
+    tagline: str = ""
+    readme: str | None = None
     mailmap: str | None = None
     theme: ThemeConfig = field(default_factory=ThemeConfig)
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            from urllib.parse import urlsplit
+
+            object.__setattr__(
+                self, "name", urlsplit(self.base_url).hostname or self.base_url
+            )
 
 
 @dataclass(frozen=True)
@@ -188,9 +208,18 @@ def _parse_site(raw: Any) -> Site:
         source=source,
         branch=_str(raw, "branch", "site", "main"),
         base_url=base_url.rstrip("/"),
+        name=_str(raw, "name", "site", _site_name(base_url)) or _site_name(base_url),
+        tagline=_str(raw, "tagline", "site", "") or "",
+        readme=_readme_path(raw),
         mailmap=_str(raw, "mailmap", "site"),
         theme=_parse_theme(raw.get("theme", {})),
     )
+
+
+def _site_name(base_url: str) -> str:
+    from urllib.parse import urlsplit
+
+    return urlsplit(base_url).hostname or base_url.rstrip("/")
 
 
 def _parse_theme(raw: Any) -> ThemeConfig:
@@ -246,3 +275,19 @@ def _parse_project(name: str, raw: Any) -> Project:
         approved=_sha(raw, "approved", where),
         allow_rewrite_of=_sha(raw, "allow_rewrite_of", where),
     )
+
+
+def _readme_path(raw: dict) -> str | None:
+    value = _str(raw, "readme", "site")
+    if value is not None and (
+        not value
+        or "\\" in value
+        or ":" in value
+        or any(ord(c) < 32 for c in value)
+        or any(p in ("", ".", "..") for p in value.split("/"))
+        or not value.lower().endswith((".md", ".markdown"))
+    ):
+        raise ManifestError(
+            "site.readme must be a source-repository-relative Markdown file without traversal"
+        )
+    return value

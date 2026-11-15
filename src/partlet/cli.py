@@ -31,6 +31,7 @@ from partlet.publish import (
 )
 from partlet.review import ReviewError, fetch_published_tip, run_review
 from partlet.scan import ScanError, Scanner
+from partlet.site.homepage import HomepageError, load_homepage
 from partlet.site.themes import BUILTIN_THEMES, ResolvedTheme, ThemeError, resolve_theme
 from partlet.store import (
     LocalPathError,
@@ -156,7 +157,9 @@ def _parser() -> argparse.ArgumentParser:
         "build all approved projects into a local store",
         "Export every approved project into a local object store. Unapproved "
         "projects are skipped. Output is for 'partlet worker preview', "
-        "not a directory to open directly in a browser. Nothing is uploaded.",
+        "not a directory to open directly in a browser. Includes the selected "
+        "committed site.readme introduction, which is not secret-scanned. "
+        "Nothing is uploaded.",
         "  partlet build --scan --out ./preview\n"
         "  partlet build --scan --out ./preview --repo /path/to/source",
     )
@@ -167,7 +170,7 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--scan",
         action="store_true",
-        help="scan each export with gitleaks before writing it, as publish does",
+        help="scan each project export with gitleaks; does not scan site.readme",
     )
     _summary_arg(build)
 
@@ -179,7 +182,7 @@ def _parser() -> argparse.ArgumentParser:
         "them at localhost using the real Worker and simulated R2. No hosting "
         "configuration or cloud account is needed. Requires 'partlet setup "
         "--worker' once. Reads committed history from site.branch, plus the "
-        "current manifest; uncommitted source and vendored theme edits are not "
+        "current manifest; uncommitted source, site.readme and vendored theme edits are not "
         "included. Stop with Ctrl-C; temporary output is removed. Approvals "
         "and the source checkout are not changed.",
         "  partlet preview\n"
@@ -197,7 +200,7 @@ def _parser() -> argparse.ArgumentParser:
     preview.add_argument(
         "--scan",
         action="store_true",
-        help="scan exported history for secrets before serving (off by default)",
+        help="scan project history before serving; excludes site.readme (off by default)",
     )
 
     publish = _command(
@@ -206,7 +209,9 @@ def _parser() -> argparse.ArgumentParser:
         "publish all approved projects to R2 (used by CI)",
         "Scan and publish every approved project to Cloudflare R2. Requires "
         "PARTLET_R2_* credentials, HEAD at the publishing branch tip, and a "
-        "committed manifest. Normally run by your GitHub Action after a push.",
+        "committed manifest. Also publishes the selected site.readme introduction "
+        "without secret scanning or project approval. Normally run by your "
+        "GitHub Action after a push.",
         "  partlet publish\n"
         "  partlet publish --repo /path/to/source --summary ./summary.md",
     )
@@ -480,7 +485,7 @@ def _publish_into(
             results = publish_all(
                 repo, manifest, store, Path(tmp), scanner, theme=theme
             )
-    except (LockError, StoreError, LocalPathError, OSError) as e:
+    except (LockError, StoreError, LocalPathError, OSError, HomepageError) as e:
         print(f"partlet: {e}", file=sys.stderr)
         _save_summary(summary, summary_markdown(title, [], versions, error=str(e)))
         return 1
@@ -519,11 +524,13 @@ def _build(args: argparse.Namespace) -> int:
             manifest_path=manifest_path,
             require_clean=args.require_committed,
         )
+        load_homepage(repo, manifest.site, require_clean=args.require_committed)
         tools = check_tools(gitleaks=args.scan)
     except (
         ManifestError,
         CheckoutError,
         ThemeError,
+        HomepageError,
         ToolError,
         OSError,
         UnicodeError,
@@ -559,6 +566,7 @@ def _preview(args: argparse.Namespace) -> int:
                 "no projects configured; add [projects.NAME] to the manifest"
             )
         runtime.worker_root()  # Fail before exporting if setup has not been run.
+        load_homepage(repo, manifest.site, require_clean=args.require_committed)
         tools = check_tools(gitleaks=args.scan)
         theme = resolve_theme(
             manifest.site.theme,
@@ -595,6 +603,7 @@ def _preview(args: argparse.Namespace) -> int:
     except (
         ManifestError,
         ThemeError,
+        HomepageError,
         ToolError,
         ExportError,
         GitError,
@@ -628,6 +637,7 @@ def _publish(args: argparse.Namespace) -> int:
             manifest_path=manifest_path,
             require_clean=True,
         )
+        load_homepage(repo, manifest.site, require_clean=True)
         tools = check_tools(gitleaks=True)
         store = R2Store(config)
     except (
@@ -635,6 +645,7 @@ def _publish(args: argparse.Namespace) -> int:
         ManifestError,
         CheckoutError,
         ThemeError,
+        HomepageError,
         ToolError,
         OSError,
         UnicodeError,

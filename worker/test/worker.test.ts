@@ -242,7 +242,9 @@ describe("not found and errors", () => {
     expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
-    expect(await text(res)).toContain("Not found");
+    const html = await text(res);
+    expect(html).toContain("Not found");
+    expect(html).toContain('href="/">Home</a>');
   });
 
   it("cannot reach keys outside the project", async () => {
