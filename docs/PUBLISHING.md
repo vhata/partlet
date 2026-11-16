@@ -291,6 +291,46 @@ object representations do not include credentials. Test runs strip
 ambient cloud credentials and use fake keys against a local S3
 simulator.
 
+### Local shell credentials
+
+Use the existing site's R2 Access Key ID and Secret Access Key, together
+with its account ID and bucket name. These are the same values supplied
+to the publishing Action. Wrangler login authorizes Worker management;
+it does not configure the publisher's R2 access. Neither `wrangler.toml`
+nor `partlet.toml` supplies the publisher's credentials. GitHub Actions
+secrets are available to the workflow, not automatically to your local
+shell.
+
+The following command starts Bash and prompts for the four settings.
+Replace `/path/to/source` with your source checkout. The key prompts
+hide input and keep the values out of shell history; the settings are
+scoped to this command's shell:
+
+```bash
+bash -c '
+  set -e
+  read -r -p "Cloudflare account ID: " PARTLET_R2_ACCOUNT_ID
+  read -r -p "R2 bucket name: " PARTLET_R2_BUCKET
+  read -r -s -p "R2 access key ID: " PARTLET_R2_ACCESS_KEY_ID
+  printf "\n"
+  read -r -s -p "R2 secret access key: " PARTLET_R2_SECRET_ACCESS_KEY
+  printf "\n"
+  export PARTLET_R2_ACCOUNT_ID PARTLET_R2_BUCKET
+  export PARTLET_R2_ACCESS_KEY_ID PARTLET_R2_SECRET_ACCESS_KEY
+  partlet publish --repo /path/to/source
+'
+```
+
+If the workflow sets an `endpoint` input, also export
+`PARTLET_R2_ENDPOINT` with that same value before publishing. Keep
+credentials out of the source checkout and manifest. If you keep them in
+a private environment file, load it explicitly and export its variables;
+Partlet does not load `.env` files itself.
+
+If you no longer have a local copy of the R2 key pair, use the
+configured GitHub workflow to publish with its stored secrets. You do
+not need a new bucket or new credentials merely to upgrade Partlet.
+
 ### Secret scanning and tool versions
 
 The publisher requires Git 2.31 or newer, git-filter-repo 2.47.0

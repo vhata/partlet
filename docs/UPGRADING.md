@@ -32,11 +32,11 @@ each existing site:
 1. Wait at least 60 seconds so legacy Git metadata cache entries can
    expire, then update the GitHub Action's Partlet commit pin to the
    same reviewed revision, if the site uses the Action.
-1. Run the normal publishing workflow, or run
-   `partlet publish --repo /path/to/source` with the site's R2
-   credentials. Check that every intended project reports `published` or
-   `unchanged`; investigate `failed` or `skipped` results before calling
-   the upgrade complete.
+1. Republish using [GitHub Actions](#republish-with-github-actions) or
+   [your local shell](#republish-locally), as described below. Check
+   that every intended project reports `published` or `unchanged`;
+   investigate `failed` or `skipped` results before calling the upgrade
+   complete.
 
 Keep the existing buckets, domains, manifest source prefixes and
 approval pins. Installing Partlet and deploying its Worker leave stored
@@ -44,6 +44,43 @@ project pages unchanged until publication. Renderer or theme changes
 rebuild pages automatically on publication, even without new project
 commits; they do not change exported history or require renewed history
 approval.
+
+### Republish with GitHub Actions
+
+If your site normally publishes through GitHub Actions, use that
+workflow. It receives the site's R2 credentials from GitHub secrets; you
+do not need to configure them on your computer.
+
+Commit and push the updated Partlet Action pin and any source or
+manifest changes to the publishing branch (`site.branch`). The
+[example workflow](../examples/partlet.yml) runs on pushes to that
+branch. To start a run manually, open the source repository's **Actions
+→ Partlet → Run workflow**, or use:
+
+```bash
+cd /path/to/source
+gh workflow run partlet.yml --ref main
+gh run list --workflow partlet.yml --branch main --limit 5
+```
+
+Replace `partlet.yml` and `main` with your workflow filename and
+publishing branch. Manual runs require `workflow_dispatch`, which the
+example includes. Open the new run's summary to check the project
+results. Updating your local Partlet installation does not update the
+Action's pinned revision.
+
+### Republish locally
+
+Before running `partlet publish --repo /path/to/source`, load the site's
+R2 settings into the command's environment using the
+[local credential instructions](PUBLISHING.md#local-shell-credentials).
+Wrangler login, the Worker config and GitHub secrets do not supply these
+settings to a local command. Partlet does not automatically load a
+`.env` file.
+
+If the command reports `missing R2 settings`, those environment
+variables are absent or empty. Supply the existing site's credentials as
+described in that guide, or use its configured GitHub workflow above.
 
 ### Semantic output version 1 migration
 
