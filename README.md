@@ -1,3 +1,5 @@
+<p><img src="assets/partlet.png" alt="Partlet logo" width="80" height="80"></p>
+
 # Partlet
 
 Partlet lets you make individual projects in a private Git repository

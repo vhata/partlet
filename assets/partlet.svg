@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+<title id="title">Partlet logo</title>
+<desc id="desc">A mint project tile leaves a stack of directories and becomes a standalone repository card, on a rounded ink background.</desc>
+<rect x="0" y="0" width="256" height="256" rx="56" fill="#101820" stroke="none" stroke-width="1"/>
+<rect x="34" y="49" width="98" height="158" rx="12" fill="#182731" stroke="#516575" stroke-width="3"/>
+<rect x="49" y="67" width="67" height="27" rx="5" fill="#2c3d48" stroke="none" stroke-width="1"/>
+<rect x="49" y="113" width="67" height="27" rx="5" fill="#24453f" stroke="#87d6c4" stroke-width="3"/>
+<rect x="49" y="159" width="67" height="27" rx="5" fill="#2c3d48" stroke="none" stroke-width="1"/>
+<polyline points="119,127 164,127" fill="none" stroke="#87d6c4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="155,118 164,127 155,136" fill="none" stroke="#87d6c4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="173" y="96" width="53" height="64" rx="7" fill="#203b37" stroke="#87d6c4" stroke-width="3"/>
+<polyline points="185,114 212,114" fill="none" stroke="#87d6c4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="185,127 205,127" fill="none" stroke="#639c8e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="185,140 208,140" fill="none" stroke="#639c8e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
